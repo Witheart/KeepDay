@@ -1,5 +1,10 @@
 package com.example.keepday.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -27,6 +32,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,12 +42,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.keepday.data.Habit
 import com.example.keepday.data.HabitStore
+import com.example.keepday.data.ReminderSetting
 import com.example.keepday.data.SettingsStore
+import com.example.keepday.reminder.ReminderScheduler
 import com.example.keepday.ui.detail.HabitDetailScreen
 import com.example.keepday.ui.editor.HabitEditorDialog
 import com.example.keepday.ui.settings.SettingsSheet
@@ -68,6 +78,51 @@ fun KeepDayApp() {
     var editorTarget by remember { mutableStateOf<Habit?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    var pendingReminder by remember { mutableStateOf<ReminderSetting?>(null) }
+
+    fun applyReminder(setting: ReminderSetting) {
+        SettingsStore.updateReminder(setting.enabled, setting.hour, setting.minute)
+        ReminderScheduler.apply(context, setting)
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val setting = pendingReminder
+        pendingReminder = null
+        if (setting != null) {
+            if (granted) {
+                applyReminder(setting)
+            } else {
+                // 没有通知权限时提醒无法生效，回退为关闭状态
+                SettingsStore.updateReminder(false, setting.hour, setting.minute)
+            }
+        }
+    }
+
+    fun handleReminderChange(enabled: Boolean, hour: Int, minute: Int) {
+        val setting = ReminderSetting(enabled, hour, minute)
+        val needsPermission = enabled &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needsPermission) {
+            pendingReminder = setting
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            applyReminder(setting)
+        }
+    }
+
+    // 每次进入应用都对齐一次闹钟，避免被系统清理后静默失效
+    LaunchedEffect(Unit) {
+        val current = SettingsStore.reminder.value
+        if (current.enabled) {
+            ReminderScheduler.apply(context, current)
+        }
+    }
 
     val detailHabit = habits.firstOrNull { it.id == detailId }
 
@@ -188,7 +243,7 @@ fun KeepDayApp() {
             reminder = reminder,
             habitsCount = habits.size,
             onReminderChange = { enabled, hour, minute ->
-                SettingsStore.updateReminder(enabled, hour, minute)
+                handleReminderChange(enabled, hour, minute)
             },
             onClearAll = {
                 HabitStore.clearAll()
