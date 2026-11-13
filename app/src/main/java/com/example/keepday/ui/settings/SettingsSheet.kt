@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -23,7 +25,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +55,7 @@ fun SettingsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showClearConfirm by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -105,14 +110,21 @@ fun SettingsSheet(
 
                     if (reminder.enabled) {
                         Spacer(Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            timePresets.forEach { (hour, minute) ->
-                                val selected = reminder.hour == hour && reminder.minute == minute
-                                val label = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+                        val isPreset = timePresets.any { it.first == reminder.hour && it.second == reminder.minute }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(items = timePresets) { preset ->
+                                val (hour, minute) = preset
                                 TimeChip(
-                                    label = label,
-                                    selected = selected,
+                                    label = formatTime(hour, minute),
+                                    selected = reminder.hour == hour && reminder.minute == minute,
                                     onClick = { onReminderChange(true, hour, minute) }
+                                )
+                            }
+                            item {
+                                TimeChip(
+                                    label = if (isPreset) "自定义" else "自定义 ${reminder.label}",
+                                    selected = !isPreset,
+                                    onClick = { showTimePicker = true }
                                 )
                             }
                         }
@@ -246,7 +258,60 @@ fun SettingsSheet(
             }
         )
     }
+
+    if (showTimePicker) {
+        TimePickerDialog(
+            initialHour = reminder.hour,
+            initialMinute = reminder.minute,
+            onDismiss = { showTimePicker = false },
+            onConfirm = { hour, minute ->
+                showTimePicker = false
+                onReminderChange(true, hour, minute)
+            }
+        )
+    }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimePickerDialog(
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (hour: Int, minute: Int) -> Unit
+) {
+    val state = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+        is24Hour = true
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(26.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = {
+            Text(
+                text = "设置提醒时间",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = { TimePicker(state = state) },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(state.hour, state.minute) }) {
+                Text(text = "确定", fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    )
+}
+
+private fun formatTime(hour: Int, minute: Int): String =
+    "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 
 @Composable
 private fun TimeChip(label: String, selected: Boolean, onClick: () -> Unit) {
