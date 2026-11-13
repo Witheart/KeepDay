@@ -1,6 +1,11 @@
 package com.example.keepday.ui.today
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -33,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -40,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.keepday.data.Habit
 import com.example.keepday.ui.components.CheckButton
 import com.example.keepday.ui.components.Dot
@@ -67,11 +74,14 @@ fun TodayScreen(
     onDelete: (Habit) -> Unit,
     onAdd: () -> Unit,
     onOpenSettings: () -> Unit,
+    pendingFirst: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val doneToday = habits.count { it.isDone(today) }
     val allDone = habits.isNotEmpty() && doneToday == habits.size
     val bestStreak = habits.maxOfOrNull { it.bestStreak } ?: 0
+    // 未完成的排在前面，已完成的下沉，避免视线被已完成的项占满
+    val displayHabits = if (pendingFirst) habits.sortedBy { it.isDone(today) } else habits
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -103,8 +113,9 @@ fun TodayScreen(
                 )
             }
         } else {
-            items(items = habits, key = { it.id }) { habit ->
+            items(items = displayHabits, key = { it.id }) { habit ->
                 HabitCard(
+                    modifier = Modifier.animateItem(),
                     habit = habit,
                     today = today,
                     onToggle = { onToggle(habit) },
@@ -179,6 +190,10 @@ private fun TodayHeader(
                 if (bestStreak > 0) {
                     StreakBadge(bestStreak)
                 }
+                Spacer(Modifier.weight(1f))
+                if (allDone) {
+                    CelebrationSparkles()
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -229,6 +244,7 @@ private fun TodayHeader(
 
 @Composable
 private fun HabitCard(
+    modifier: Modifier = Modifier,
     habit: Habit,
     today: LocalDate,
     onToggle: () -> Unit,
@@ -252,7 +268,7 @@ private fun HabitCard(
     )
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = containerColor,
         border = BorderStroke(1.dp, borderColor),
@@ -337,6 +353,26 @@ private fun HabitCard(
                 }
             }
         }
+    }
+}
+
+/** 全部完成时在右上角闪烁的小星光，克制但有反馈。 */
+@Composable
+private fun CelebrationSparkles() {
+    val transition = rememberInfiniteTransition(label = "sparkles")
+    val alpha by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "sparkleAlpha"
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(text = "✨", fontSize = 14.sp, modifier = Modifier.alpha(alpha))
+        Spacer(Modifier.width(2.dp))
+        Text(text = "✨", fontSize = 10.sp, modifier = Modifier.alpha(alpha * 0.8f))
     }
 }
 

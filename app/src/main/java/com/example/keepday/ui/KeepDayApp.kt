@@ -69,6 +69,7 @@ private enum class AppTab(val label: String, val glyph: String) {
 fun KeepDayApp() {
     val habits by HabitStore.habits.collectAsState()
     val reminder by SettingsStore.reminder.collectAsState()
+    val pendingFirst by SettingsStore.pendingFirst.collectAsState()
     val today = LocalDate.now()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -121,6 +122,19 @@ fun KeepDayApp() {
         val current = SettingsStore.reminder.value
         if (current.enabled) {
             ReminderScheduler.apply(context, current)
+        }
+    }
+
+    // 当天全部完成时给一次正反馈，只在状态翻转时触发
+    val doneToday = habits.count { it.isDone(today) }
+    var celebrated by remember { mutableStateOf(false) }
+    LaunchedEffect(doneToday, habits.size) {
+        val allDone = habits.isNotEmpty() && doneToday == habits.size
+        if (allDone && !celebrated) {
+            celebrated = true
+            snackbarHostState.showSnackbar(message = "🎉 今天的习惯全部完成，继续保持")
+        } else if (!allDone) {
+            celebrated = false
         }
     }
 
@@ -214,7 +228,8 @@ fun KeepDayApp() {
                             editorTarget = null
                             showEditor = true
                         },
-                        onOpenSettings = { showSettings = true }
+                        onOpenSettings = { showSettings = true },
+                        pendingFirst = pendingFirst
                     )
                 }
             }
@@ -241,10 +256,12 @@ fun KeepDayApp() {
     if (showSettings) {
         SettingsSheet(
             reminder = reminder,
+            pendingFirst = pendingFirst,
             habitsCount = habits.size,
             onReminderChange = { enabled, hour, minute ->
                 handleReminderChange(enabled, hour, minute)
             },
+            onPendingFirstChange = { SettingsStore.updatePendingFirst(it) },
             onClearAll = {
                 HabitStore.clearAll()
                 detailId = null

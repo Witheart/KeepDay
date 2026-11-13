@@ -42,8 +42,10 @@ private val timePresets = listOf(7 to 0, 8 to 0, 12 to 0, 20 to 0, 21 to 0, 22 t
 @Composable
 fun SettingsSheet(
     reminder: ReminderSetting,
+    pendingFirst: Boolean,
     habitsCount: Int,
     onReminderChange: (enabled: Boolean, hour: Int, minute: Int) -> Unit,
+    onPendingFirstChange: (Boolean) -> Unit,
     onClearAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -115,6 +117,43 @@ fun SettingsSheet(
                             }
                         }
                     }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // 打卡偏好
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "未完成的排在前面",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = "今天已打卡的习惯自动下沉到列表末尾",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = pendingFirst,
+                        onCheckedChange = onPendingFirstChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
                 }
             }
 

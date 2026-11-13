@@ -23,11 +23,16 @@ object SettingsStore {
     private const val KEY_ENABLED = "reminder_enabled"
     private const val KEY_HOUR = "reminder_hour"
     private const val KEY_MINUTE = "reminder_minute"
+    private const val KEY_PENDING_FIRST = "sort_pending_first"
 
     private var prefs: SharedPreferences? = null
 
     private val _reminder = MutableStateFlow(ReminderSetting())
     val reminder: StateFlow<ReminderSetting> = _reminder.asStateFlow()
+
+    /** 是否把今天还没打卡的习惯排在前面。 */
+    private val _pendingFirst = MutableStateFlow(true)
+    val pendingFirst: StateFlow<Boolean> = _pendingFirst.asStateFlow()
 
     fun init(context: Context) {
         if (prefs != null) return
@@ -39,6 +44,7 @@ object SettingsStore {
             hour = storage.getInt(KEY_HOUR, 21),
             minute = storage.getInt(KEY_MINUTE, 0)
         )
+        _pendingFirst.value = storage.getBoolean(KEY_PENDING_FIRST, true)
     }
 
     fun updateReminder(enabled: Boolean, hour: Int, minute: Int) {
@@ -49,5 +55,10 @@ object SettingsStore {
             ?.putInt(KEY_HOUR, setting.hour)
             ?.putInt(KEY_MINUTE, setting.minute)
             ?.apply()
+    }
+
+    fun updatePendingFirst(enabled: Boolean) {
+        _pendingFirst.value = enabled
+        prefs?.edit()?.putBoolean(KEY_PENDING_FIRST, enabled)?.apply()
     }
 }
