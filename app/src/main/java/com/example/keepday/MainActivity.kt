@@ -4,44 +4,33 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.example.keepday.data.HabitStore
+import com.example.keepday.ui.HabitScreen
 import com.example.keepday.ui.theme.KeepDayTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        HabitStore.init(this)
         setContent {
             KeepDayTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                KeepDayApp()
             }
         }
     }
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
+private fun KeepDayApp() {
+    val habits by HabitStore.habits.collectAsState()
+    HabitScreen(
+        habits = habits,
+        onToggle = { HabitStore.toggle(it) },
+        onAddHabit = { name, emoji, accentIndex -> HabitStore.add(name, emoji, accentIndex) },
+        onDelete = { HabitStore.delete(it) }
     )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    KeepDayTheme {
-        Greeting("Android")
-    }
 }
