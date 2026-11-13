@@ -141,6 +141,7 @@ fun KeepDayApp() {
     val detailHabit = habits.firstOrNull { it.id == detailId }
 
     fun deleteHabit(habit: Habit) {
+        val index = habits.indexOfFirst { it.id == habit.id }
         HabitStore.delete(habit.id)
         if (detailId == habit.id) detailId = null
         scope.launch {
@@ -150,7 +151,7 @@ fun KeepDayApp() {
                 duration = SnackbarDuration.Short
             )
             if (result == SnackbarResult.ActionPerformed) {
-                HabitStore.restore(habit)
+                HabitStore.restore(habit, index)
             }
         }
     }
@@ -229,6 +230,8 @@ fun KeepDayApp() {
                             showEditor = true
                         },
                         onOpenSettings = { showSettings = true },
+                        onTogglePin = { habit -> HabitStore.togglePin(habit.id) },
+                        onMove = { habit, offset -> HabitStore.move(habit.id, offset) },
                         pendingFirst = pendingFirst
                     )
                 }

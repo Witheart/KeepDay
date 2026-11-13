@@ -20,6 +20,7 @@ data class Habit(
     val emoji: String,
     val accentIndex: Int,
     val weekGoal: Int = 7,
+    val pinned: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val days: Set<Long> = emptySet()
 ) {

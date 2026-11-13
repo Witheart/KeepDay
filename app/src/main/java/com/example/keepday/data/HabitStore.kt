@@ -81,11 +81,41 @@ object HabitStore {
         return removed
     }
 
-    /** 撤销删除，按创建时间插回原位。 */
-    fun restore(habit: Habit) {
+    /** 撤销删除，尽量插回原来的位置。 */
+    fun restore(habit: Habit, index: Int = Int.MAX_VALUE) {
         if (_habits.value.any { it.id == habit.id }) return
-        val restored = (_habits.value + habit).sortedBy { it.createdAt }
-        persist(restored)
+        val target = _habits.value.toMutableList()
+        target.add(index.coerceIn(0, target.size), habit)
+        persist(target)
+    }
+
+    /** 置顶 / 取消置顶。 */
+    fun togglePin(id: String) {
+        persist(
+            _habits.value.map { habit ->
+                if (habit.id == id) habit.copy(pinned = !habit.pinned) else habit
+            }
+        )
+    }
+
+    /**
+     * 在同组（置顶 / 非置顶）内上下移动一格。
+     * @param offset -1 上移，+1 下移。
+     */
+    fun move(id: String, offset: Int) {
+        val list = _habits.value.toMutableList()
+        val from = list.indexOfFirst { it.id == id }
+        if (from < 0) return
+        val pinned = list[from].pinned
+        var to = from + offset
+        // 只与同组的相邻项交换，避免一次移动跨过置顶分界线
+        while (to in list.indices && list[to].pinned != pinned) {
+            to += offset
+        }
+        if (to !in list.indices) return
+        val item = list.removeAt(from)
+        list.add(to, item)
+        persist(list)
     }
 
     fun toggle(id: String, date: LocalDate = LocalDate.now()) {
@@ -126,6 +156,7 @@ object HabitStore {
             item.put("emoji", habit.emoji)
             item.put("accentIndex", habit.accentIndex)
             item.put("weekGoal", habit.weekGoal)
+            item.put("pinned", habit.pinned)
             item.put("createdAt", habit.createdAt)
             val days = JSONArray()
             habit.days.sorted().forEach(days::put)
@@ -153,10 +184,11 @@ object HabitStore {
                     emoji = item.optString("emoji", "✅"),
                     accentIndex = item.optInt("accentIndex", 0),
                     weekGoal = item.optInt("weekGoal", 7),
+                    pinned = item.optBoolean("pinned", false),
                     createdAt = item.optLong("createdAt", 0L),
                     days = days
                 )
-            }.sortedBy { it.createdAt }
+            }
         }.getOrDefault(emptyList())
     }
 }

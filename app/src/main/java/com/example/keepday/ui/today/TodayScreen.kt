@@ -74,14 +74,19 @@ fun TodayScreen(
     onDelete: (Habit) -> Unit,
     onAdd: () -> Unit,
     onOpenSettings: () -> Unit,
+    onTogglePin: (Habit) -> Unit,
+    onMove: (Habit, Int) -> Unit,
     pendingFirst: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val doneToday = habits.count { it.isDone(today) }
     val allDone = habits.isNotEmpty() && doneToday == habits.size
     val bestStreak = habits.maxOfOrNull { it.bestStreak } ?: 0
-    // 未完成的排在前面，已完成的下沉，避免视线被已完成的项占满
-    val displayHabits = if (pendingFirst) habits.sortedBy { it.isDone(today) } else habits
+    // 置顶的习惯永远在最前；组内未完成的优先，已完成的自动下沉
+    val displayHabits = habits.sortedWith(
+        compareByDescending<Habit> { it.pinned }
+            .thenBy { pendingFirst && it.isDone(today) }
+    )
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -121,7 +126,10 @@ fun TodayScreen(
                     onToggle = { onToggle(habit) },
                     onOpenDetail = { onOpenDetail(habit) },
                     onEdit = { onEdit(habit) },
-                    onDelete = { onDelete(habit) }
+                    onDelete = { onDelete(habit) },
+                    onTogglePin = { onTogglePin(habit) },
+                    onMoveUp = { onMove(habit, -1) },
+                    onMoveDown = { onMove(habit, 1) }
                 )
             }
         }
@@ -250,7 +258,10 @@ private fun HabitCard(
     onToggle: () -> Unit,
     onOpenDetail: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onTogglePin: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
 ) {
     val accent = accentOf(habit.accentIndex)
     val done = habit.isDone(today)
@@ -287,13 +298,20 @@ private fun HabitCard(
                 Spacer(Modifier.width(14.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = habit.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = habit.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (habit.pinned) {
+                            Spacer(Modifier.width(4.dp))
+                            Text(text = "📌", fontSize = 11.sp)
+                        }
+                    }
                     Spacer(Modifier.height(5.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -334,6 +352,27 @@ private fun HabitCard(
                     onDismissRequest = { menuExpanded = false },
                     containerColor = MaterialTheme.colorScheme.surface
                 ) {
+                    DropdownMenuItem(
+                        text = { Text(if (habit.pinned) "取消置顶" else "置顶") },
+                        onClick = {
+                            menuExpanded = false
+                            onTogglePin()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("上移") },
+                        onClick = {
+                            menuExpanded = false
+                            onMoveUp()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("下移") },
+                        onClick = {
+                            menuExpanded = false
+                            onMoveDown()
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text("编辑") },
                         onClick = {
@@ -418,7 +457,9 @@ private fun TodayScreenPreview() {
             onEdit = {},
             onDelete = {},
             onAdd = {},
-            onOpenSettings = {}
+            onOpenSettings = {},
+            onTogglePin = {},
+            onMove = { _, _ -> }
         )
     }
 }
