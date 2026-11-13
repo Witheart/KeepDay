@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">KeepDay</string>
+    <string name="widget_title">今日打卡</string>
+    <string name="widget_label">今日打卡</string>
+    <string name="widget_description">显示今日打卡进度与待完成的习惯</string>
 </resources>

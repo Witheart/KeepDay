@@ -52,6 +52,7 @@ import com.example.keepday.data.HabitStore
 import com.example.keepday.data.ReminderSetting
 import com.example.keepday.data.SettingsStore
 import com.example.keepday.reminder.ReminderScheduler
+import com.example.keepday.widget.TodayWidgetProvider
 import com.example.keepday.ui.detail.HabitDetailScreen
 import com.example.keepday.ui.editor.HabitEditorDialog
 import com.example.keepday.ui.settings.SettingsSheet
@@ -136,6 +137,11 @@ fun KeepDayApp() {
         } else if (!allDone) {
             celebrated = false
         }
+    }
+
+    // 数据变化后同步刷新桌面小组件
+    LaunchedEffect(habits) {
+        TodayWidgetProvider.updateAll(context)
     }
 
     val detailHabit = habits.firstOrNull { it.id == detailId }
