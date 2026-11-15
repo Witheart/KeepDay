@@ -220,6 +220,18 @@ object HabitStore {
         _resetNotices.value = emptyList()
     }
 
+    /** 导出全部习惯（JSON 数组字符串），供备份使用。 */
+    fun exportHabitsJson(): String = encode(_habits.value)
+
+    /** 从备份恢复；格式非法时返回 false 且不改动现有数据。 */
+    fun importHabitsJson(json: String): Boolean {
+        val trimmed = json.trim()
+        if (!trimmed.startsWith("[")) return false
+        val array = runCatching { JSONArray(trimmed) }.getOrNull() ?: return false
+        persist(decode(array.toString()))
+        return true
+    }
+
     private fun persist(habits: List<Habit>) {
         _habits.value = habits
         prefs?.edit()

@@ -13,7 +13,7 @@ class WidgetCheckInReceiver : BroadcastReceiver() {
         val habitId = intent.getStringExtra(EXTRA_HABIT_ID) ?: return
         HabitStore.init(context)
         HabitStore.toggle(habitId)
-        TodayWidgetProvider.updateAll(context)
+        WidgetUpdater.updateAll(context)
     }
 
     companion object {

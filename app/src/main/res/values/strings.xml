@@ -5,4 +5,6 @@
     <string name="widget_description">显示今日打卡进度，点习惯行即可直接打卡</string>
     <string name="widget_empty">还没有习惯，点一下添加第一个目标</string>
     <string name="widget_hint">点行直接打卡 ›</string>
+    <string name="widget_compact_label">今日打卡</string>
+    <string name="widget_compact_description">紧凑尺寸，只显示今日完成进度环</string>
 </resources>

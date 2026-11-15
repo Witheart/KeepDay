@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.keepday.calendar.CalendarReminder
+import com.example.keepday.data.BackupManager
 import com.example.keepday.data.Habit
 import com.example.keepday.data.HabitStore
 import com.example.keepday.data.SettingsStore
@@ -54,7 +55,7 @@ import com.example.keepday.ui.editor.HabitEditorDialog
 import com.example.keepday.ui.settings.SettingsSheet
 import com.example.keepday.ui.stats.StatsScreen
 import com.example.keepday.ui.today.TodayScreen
-import com.example.keepday.widget.TodayWidgetProvider
+import com.example.keepday.widget.WidgetUpdater
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -142,6 +143,42 @@ fun KeepDayApp() {
         }
     }
 
+    var pendingImport by remember { mutableStateOf<String?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            val ok = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    stream.write(BackupManager.exportJson().toByteArray(Charsets.UTF_8))
+                } ?: error("openOutputStream failed")
+            }.isSuccess
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    if (ok) "备份已导出" else "导出失败，换个位置再试"
+                )
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val text = runCatching {
+                context.contentResolver.openInputStream(uri)
+                    ?.bufferedReader()
+                    ?.use { it.readText() }
+            }.getOrNull()
+            if (text.isNullOrBlank()) {
+                scope.launch { snackbarHostState.showSnackbar("读取备份失败") }
+            } else {
+                pendingImport = text
+            }
+        }
+    }
+
     fun deleteHabit(habit: Habit) {
         val index = habits.indexOfFirst { it.id == habit.id }
         HabitStore.delete(habit.id)
@@ -173,7 +210,7 @@ fun KeepDayApp() {
 
     // 数据变化后刷新桌面小组件
     LaunchedEffect(habits) {
-        TodayWidgetProvider.updateAll(context)
+        WidgetUpdater.updateAll(context)
     }
 
     val detailHabit = habits.firstOrNull { it.id == detailId }
@@ -274,6 +311,55 @@ fun KeepDayApp() {
         )
     }
 
+    pendingImport?.let { raw ->
+        val count = BackupManager.peekHabitCount(raw)
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = {
+                Text(
+                    text = "恢复备份",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "这份备份包含 $count 个习惯。恢复会覆盖当前所有习惯和记录，且无法撤销。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val result = BackupManager.importJson(raw)
+                        pendingImport = null
+                        detailId = null
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                if (result.success) "已恢复 ${result.habitCount} 个习惯"
+                                else result.message ?: "恢复失败"
+                            )
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "覆盖并恢复",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingImport = null }) {
+                    Text(text = "取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        )
+    }
+
     backfillTarget?.let { habit ->
         AlertDialog(
             onDismissRequest = { backfillTarget = null },
@@ -326,6 +412,12 @@ fun KeepDayApp() {
             onSetCalendarReminder = { hour, minute -> setCalendarReminder(hour, minute) },
             onRemoveCalendarReminder = { removeCalendarReminder() },
             onPendingFirstChange = { SettingsStore.updatePendingFirst(it) },
+            onExportBackup = {
+                exportLauncher.launch("keepday-backup-${LocalDate.now()}.json")
+            },
+            onImportBackup = {
+                importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+            },
             onClearAll = {
                 HabitStore.clearAll()
                 detailId = null

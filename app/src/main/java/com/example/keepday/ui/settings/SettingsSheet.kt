@@ -51,6 +51,8 @@ fun SettingsSheet(
     onSetCalendarReminder: (hour: Int, minute: Int) -> Unit,
     onRemoveCalendarReminder: () -> Unit,
     onPendingFirstChange: (Boolean) -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
     onClearAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -212,31 +214,27 @@ fun SettingsSheet(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = habitsCount > 0) { showClearConfirm = true }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = "清空所有数据",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (habitsCount > 0) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            text = "当前有 $habitsCount 个习惯，删除后无法恢复",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        text = "›",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Column {
+                    ActionRow(
+                        title = "导出备份",
+                        subtitle = "把 $habitsCount 个习惯和全部记录保存成 JSON 文件",
+                        enabled = habitsCount > 0,
+                        onClick = onExportBackup
+                    )
+                    RowDivider()
+                    ActionRow(
+                        title = "从备份恢复",
+                        subtitle = "读取之前导出的文件，会覆盖当前数据",
+                        enabled = true,
+                        onClick = onImportBackup
+                    )
+                    RowDivider()
+                    ActionRow(
+                        title = "清空所有数据",
+                        subtitle = "当前有 $habitsCount 个习惯，删除后无法恢复",
+                        enabled = habitsCount > 0,
+                        isDestructive = true,
+                        onClick = { showClearConfirm = true }
                     )
                 }
             }
@@ -347,6 +345,57 @@ private fun TimePickerDialog(
 
 private fun formatTime(hour: Int, minute: Int): String =
     "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+
+@Composable
+private fun ActionRow(
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    isDestructive: Boolean = false,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = when {
+                    !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                    isDestructive -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = "›",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun RowDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .height(1.dp)
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+    )
+}
 
 @Composable
 private fun TimeChip(label: String, selected: Boolean, onClick: () -> Unit) {
