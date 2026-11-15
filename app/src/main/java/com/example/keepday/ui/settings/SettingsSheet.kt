@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,17 +37,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.keepday.data.ReminderSetting
+import com.example.keepday.data.CalendarReminderSetting
 
 private val timePresets = listOf(7 to 0, 8 to 0, 12 to 0, 20 to 0, 21 to 0, 22 to 0)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSheet(
-    reminder: ReminderSetting,
     pendingFirst: Boolean,
     habitsCount: Int,
-    onReminderChange: (enabled: Boolean, hour: Int, minute: Int) -> Unit,
+    calendarReminder: CalendarReminderSetting,
+    calendarPermissionGranted: Boolean,
+    onSetCalendarReminder: (hour: Int, minute: Int) -> Unit,
+    onRemoveCalendarReminder: () -> Unit,
     onPendingFirstChange: (Boolean) -> Unit,
     onClearAll: () -> Unit,
     onDismiss: () -> Unit
@@ -56,6 +57,8 @@ fun SettingsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showClearConfirm by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var pendingHour by remember { mutableStateOf(calendarReminder.hour) }
+    var pendingMinute by remember { mutableStateOf(calendarReminder.minute) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -76,65 +79,98 @@ fun SettingsSheet(
             )
             Spacer(Modifier.height(20.dp))
 
-            // 每日提醒
+            // ---------------- 打卡提醒（系统日历） ----------------
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = "每日提醒",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                text = if (reminder.enabled) "每天 ${reminder.label} 提醒打卡" else "关闭时不会收到通知",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Text(
+                        text = "打卡提醒（系统日历）",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "在系统日历中写入每天重复的提醒，由日历应用负责通知——" +
+                            "即使划掉 KeepDay、清理后台也能按时响起。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                    val isPreset = timePresets.any { it.first == pendingHour && it.second == pendingMinute }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(items = timePresets) { preset ->
+                            val (hour, minute) = preset
+                            TimeChip(
+                                label = formatTime(hour, minute),
+                                selected = pendingHour == hour && pendingMinute == minute,
+                                onClick = {
+                                    pendingHour = hour
+                                    pendingMinute = minute
+                                }
                             )
                         }
-                        Switch(
-                            checked = reminder.enabled,
-                            onCheckedChange = { checked ->
-                                onReminderChange(checked, reminder.hour, reminder.minute)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary
+                        item {
+                            TimeChip(
+                                label = if (isPreset) "自定义" else formatTime(pendingHour, pendingMinute),
+                                selected = !isPreset,
+                                onClick = { showTimePicker = true }
                             )
-                        )
+                        }
                     }
 
-                    if (reminder.enabled) {
-                        Spacer(Modifier.height(14.dp))
-                        val isPreset = timePresets.any { it.first == reminder.hour && it.second == reminder.minute }
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(items = timePresets) { preset ->
-                                val (hour, minute) = preset
-                                TimeChip(
-                                    label = formatTime(hour, minute),
-                                    selected = reminder.hour == hour && reminder.minute == minute,
-                                    onClick = { onReminderChange(true, hour, minute) }
-                                )
+                    Spacer(Modifier.height(14.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                                onSetCalendarReminder(pendingHour, pendingMinute)
                             }
-                            item {
-                                TimeChip(
-                                    label = if (isPreset) "自定义" else "自定义 ${reminder.label}",
-                                    selected = !isPreset,
-                                    onClick = { showTimePicker = true }
+                        ) {
+                            Text(
+                                text = if (calendarReminder.created) {
+                                    "更新为 ${formatTime(pendingHour, pendingMinute)}"
+                                } else {
+                                    "创建每天 ${formatTime(pendingHour, pendingMinute)} 提醒"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        if (calendarReminder.created) {
+                            TextButton(onClick = onRemoveCalendarReminder) {
+                                Text(
+                                    text = "删除",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
                         }
                     }
+
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = when {
+                            !calendarPermissionGranted -> "首次创建需要授予日历权限"
+                            calendarReminder.created -> "已创建：每天 ${calendarReminder.label}（系统日历中可查看/修改）"
+                            else -> "尚未创建日历提醒"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (calendarReminder.created) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // 打卡偏好
+            // ---------------- 打卡偏好 ----------------
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -171,50 +207,61 @@ fun SettingsSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            // 数据
+            // ---------------- 数据 ----------------
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = habitsCount > 0) { showClearConfirm = true }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = "清空所有数据",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (habitsCount > 0) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                text = "当前有 $habitsCount 个习惯，删除后无法恢复",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = habitsCount > 0) { showClearConfirm = true }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            text = "›",
-                            style = MaterialTheme.typography.titleLarge,
+                            text = "清空所有数据",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (habitsCount > 0) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = "当前有 $habitsCount 个习惯，删除后无法恢复",
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Text(
+                        text = "›",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
             Spacer(Modifier.height(20.dp))
             Text(
-                text = "KeepDay 1.0 · 所有数据仅保存在本机",
+                text = "KeepDay 1.1 · 所有数据仅保存在本机",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+
+    if (showTimePicker) {
+        TimePickerDialog(
+            initialHour = pendingHour,
+            initialMinute = pendingMinute,
+            onDismiss = { showTimePicker = false },
+            onConfirm = { hour, minute ->
+                showTimePicker = false
+                pendingHour = hour
+                pendingMinute = minute
+            }
+        )
     }
 
     if (showClearConfirm) {
@@ -255,18 +302,6 @@ fun SettingsSheet(
                 TextButton(onClick = { showClearConfirm = false }) {
                     Text(text = "取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
-        )
-    }
-
-    if (showTimePicker) {
-        TimePickerDialog(
-            initialHour = reminder.hour,
-            initialMinute = reminder.minute,
-            onDismiss = { showTimePicker = false },
-            onConfirm = { hour, minute ->
-                showTimePicker = false
-                onReminderChange(true, hour, minute)
             }
         )
     }

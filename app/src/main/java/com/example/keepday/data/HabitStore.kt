@@ -47,7 +47,8 @@ object HabitStore {
         emoji: String,
         accentIndex: Int,
         weekGoal: Int = 7,
-        strict: Boolean = false
+        strict: Boolean = false,
+        allowBackfill: Boolean = true
     ): Boolean {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return false
@@ -60,7 +61,8 @@ object HabitStore {
             weekGoal = weekGoal.coerceIn(1, 7),
             strict = strict,
             // 刚开启严格模式不算断签，只有真的漏打才会写入清零点
-            streakResetDay = null
+            streakResetDay = null,
+            allowBackfill = allowBackfill
         )
         persist(_habits.value + habit)
         return true
@@ -142,21 +144,50 @@ object HabitStore {
         persist(list)
     }
 
-    fun toggle(id: String, date: LocalDate = LocalDate.now()) {
-        // 不允许给未来补卡
-        if (date.isAfter(LocalDate.now())) return
+    /**
+     * 切换某天的打卡状态。
+     * @return 是否成功；未来日期、或该习惯不允许补卡时的历史日期会被拒绝。
+     */
+    fun toggle(id: String, date: LocalDate = LocalDate.now()): Boolean {
+        val habit = find(id) ?: return false
+        if (date.isAfter(LocalDate.now())) return false
+        if (!habit.canCheckIn(date)) return false
+
         val epochDay = date.toEpochDay()
+        val removing = habit.days.contains(epochDay)
         persist(
-            _habits.value.map { habit ->
-                if (habit.id != id) {
-                    habit
-                } else if (habit.days.contains(epochDay)) {
-                    habit.copy(days = habit.days - epochDay)
+            _habits.value.map { item ->
+                if (item.id != id) {
+                    item
+                } else if (removing) {
+                    item.copy(
+                        days = item.days - epochDay,
+                        dayTimes = item.dayTimes - epochDay
+                    )
                 } else {
-                    habit.copy(days = habit.days + epochDay)
+                    item.copy(
+                        days = item.days + epochDay,
+                        dayTimes = item.dayTimes + (epochDay to System.currentTimeMillis())
+                    )
                 }
             }
         )
+        return true
+    }
+
+    /**
+     * 关闭补卡能力（单向操作，之后不可再开启）。
+     * @return 是否发生了变化。
+     */
+    fun toggleBackfill(id: String): Boolean {
+        val habit = find(id) ?: return false
+        if (!habit.allowBackfill) return false
+        persist(
+            _habits.value.map { item ->
+                if (item.id == id) item.copy(allowBackfill = false) else item
+            }
+        )
+        return true
     }
 
     fun clearAll() {
@@ -209,10 +240,14 @@ object HabitStore {
             item.put("pinned", habit.pinned)
             item.put("strict", habit.strict)
             habit.streakResetDay?.let { item.put("streakResetDay", it) }
+            item.put("allowBackfill", habit.allowBackfill)
             item.put("createdAt", habit.createdAt)
             val days = JSONArray()
             habit.days.sorted().forEach(days::put)
             item.put("days", days)
+            val times = JSONObject()
+            habit.dayTimes.forEach { (day, at) -> times.put(day.toString(), at) }
+            item.put("dayTimes", times)
             array.put(item)
         }
         return array.toString()
@@ -230,6 +265,12 @@ object HabitStore {
                         add(daysJson.getLong(dayIndex))
                     }
                 }
+                val timesJson = item.optJSONObject("dayTimes")
+                val dayTimes = buildMap {
+                    timesJson?.keys()?.forEach { key ->
+                        key.toLongOrNull()?.let { day -> put(day, timesJson.optLong(key)) }
+                    }
+                }
                 Habit(
                     id = item.getString("id"),
                     name = item.getString("name"),
@@ -241,8 +282,10 @@ object HabitStore {
                     // 旧版本的 strictSince 是"生效日"而非"断签日"，升级时丢弃，
                     // 避免历史数据被误判成断签
                     streakResetDay = if (item.has("streakResetDay")) item.optLong("streakResetDay") else null,
+                    allowBackfill = item.optBoolean("allowBackfill", true),
                     createdAt = item.optLong("createdAt", 0L),
-                    days = days
+                    days = days,
+                    dayTimes = dayTimes
                 )
             }
         }.getOrDefault(emptyList())

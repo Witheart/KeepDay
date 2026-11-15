@@ -1,8 +1,5 @@
 package com.example.keepday.ui
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
@@ -22,6 +19,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -31,6 +29,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,18 +45,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import com.example.keepday.calendar.CalendarReminder
 import com.example.keepday.data.Habit
 import com.example.keepday.data.HabitStore
-import com.example.keepday.data.ReminderSetting
 import com.example.keepday.data.SettingsStore
-import com.example.keepday.reminder.ReminderScheduler
-import com.example.keepday.widget.TodayWidgetProvider
 import com.example.keepday.ui.detail.HabitDetailScreen
 import com.example.keepday.ui.editor.HabitEditorDialog
 import com.example.keepday.ui.settings.SettingsSheet
 import com.example.keepday.ui.stats.StatsScreen
 import com.example.keepday.ui.today.TodayScreen
+import com.example.keepday.widget.TodayWidgetProvider
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -69,96 +66,81 @@ private enum class AppTab(val label: String, val glyph: String) {
 @Composable
 fun KeepDayApp() {
     val habits by HabitStore.habits.collectAsState()
-    val reminder by SettingsStore.reminder.collectAsState()
     val pendingFirst by SettingsStore.pendingFirst.collectAsState()
+    val calendarReminder by SettingsStore.calendarReminder.collectAsState()
     val today = LocalDate.now()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     var tab by remember { mutableStateOf(AppTab.Today) }
     var detailId by remember { mutableStateOf<String?>(null) }
     var editorTarget by remember { mutableStateOf<Habit?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var backfillTarget by remember { mutableStateOf<Habit?>(null) }
 
-    val context = LocalContext.current
-    var pendingReminder by remember { mutableStateOf<ReminderSetting?>(null) }
-
-    fun applyReminder(setting: ReminderSetting) {
-        SettingsStore.updateReminder(setting.enabled, setting.hour, setting.minute)
-        ReminderScheduler.apply(context, setting)
-    }
-
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        val setting = pendingReminder
-        pendingReminder = null
-        if (setting != null) {
-            if (granted) {
-                applyReminder(setting)
-            } else {
-                // 没有通知权限时提醒无法生效，回退为关闭状态
-                SettingsStore.updateReminder(false, setting.hour, setting.minute)
+    fun applyCalendarReminder(hour: Int, minute: Int) {
+        if (CalendarReminder.createOrUpdate(context, hour, minute)) {
+            SettingsStore.updateCalendarReminder(hour, minute, true)
+            scope.launch {
+                snackbarHostState.showSnackbar("已在系统日历创建每天 $hour:${minute.toString().padStart(2, '0')} 的提醒")
             }
-        }
-    }
-
-    fun handleReminderChange(enabled: Boolean, hour: Int, minute: Int) {
-        val setting = ReminderSetting(enabled, hour, minute)
-        val needsPermission = enabled &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        if (needsPermission) {
-            pendingReminder = setting
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            applyReminder(setting)
-        }
-    }
-
-    // 每次进入应用都对齐一次闹钟，避免被系统清理后静默失效
-    LaunchedEffect(Unit) {
-        val current = SettingsStore.reminder.value
-        if (current.enabled) {
-            ReminderScheduler.apply(context, current)
-        }
-    }
-
-    // 当天全部完成时给一次正反馈，只在状态翻转时触发
-    val doneToday = habits.count { it.isDone(today) }
-    var celebrated by remember { mutableStateOf(false) }
-    LaunchedEffect(doneToday, habits.size) {
-        val allDone = habits.isNotEmpty() && doneToday == habits.size
-        if (allDone && !celebrated) {
-            celebrated = true
-            snackbarHostState.showSnackbar(message = "🎉 今天的习惯全部完成，继续保持")
-        } else if (!allDone) {
-            celebrated = false
-        }
-    }
-
-    // 数据变化后同步刷新桌面小组件
-    LaunchedEffect(habits) {
-        TodayWidgetProvider.updateAll(context)
-    }
-
-    // 严格模式断签清零的提示
-    val resetNotices by HabitStore.resetNotices.collectAsState()
-    LaunchedEffect(resetNotices) {
-        if (resetNotices.isNotEmpty()) {
-            val message = if (resetNotices.size == 1) {
-                "「${resetNotices.first()}」断签，连续天数已清零"
-            } else {
-                "${resetNotices.size} 个习惯断签，连续天数已清零"
+            // 没有可写日历或权限异常：退回到系统日历的新建事件界面，由用户确认
+            val opened = CalendarReminder.openInsertIntent(context, hour, minute)
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    if (opened) "请在日历页面确认保存这条每日提醒"
+                    else "没有可用的日历应用"
+                )
             }
-            HabitStore.consumeResetNotices()
-            snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Long)
         }
     }
 
-    val detailHabit = habits.firstOrNull { it.id == detailId }
+    var pendingCalendarTime by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val calendarPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result.values.all { it }
+        val time = pendingCalendarTime
+        pendingCalendarTime = null
+        when {
+            granted && time != null -> applyCalendarReminder(time.first, time.second)
+            !granted -> scope.launch {
+                snackbarHostState.showSnackbar("未授予日历权限，无法创建提醒")
+            }
+        }
+    }
+
+    fun setCalendarReminder(hour: Int, minute: Int) {
+        if (CalendarReminder.hasPermission(context)) {
+            applyCalendarReminder(hour, minute)
+        } else {
+            pendingCalendarTime = hour to minute
+            calendarPermissionLauncher.launch(CalendarReminder.permissions())
+        }
+    }
+
+    fun removeCalendarReminder() {
+        val removed = CalendarReminder.deleteExisting(context)
+        SettingsStore.updateCalendarReminder(calendarReminder.hour, calendarReminder.minute, false)
+        scope.launch {
+            snackbarHostState.showSnackbar(if (removed) "已删除日历提醒" else "日历里没有找到提醒")
+        }
+    }
+
+    // 和系统日历对齐一次状态：用户可能在日历应用里手动删掉了事件
+    LaunchedEffect(Unit) {
+        if (CalendarReminder.hasPermission(context)) {
+            val exists = CalendarReminder.existingEventId(context) != null
+            if (exists != calendarReminder.created) {
+                SettingsStore.updateCalendarReminder(
+                    calendarReminder.hour, calendarReminder.minute, exists
+                )
+            }
+        }
+    }
 
     fun deleteHabit(habit: Habit) {
         val index = habits.indexOfFirst { it.id == habit.id }
@@ -176,18 +158,33 @@ fun KeepDayApp() {
         }
     }
 
+    // 当天全部完成时给一次正反馈，只在状态翻转时触发
+    val doneToday = habits.count { it.isDone(today) }
+    var celebrated by remember { mutableStateOf(false) }
+    LaunchedEffect(doneToday, habits.size) {
+        val allDone = habits.isNotEmpty() && doneToday == habits.size
+        if (allDone && !celebrated) {
+            celebrated = true
+            snackbarHostState.showSnackbar(message = "🎉 今天的习惯全部完成，继续保持")
+        } else if (!allDone) {
+            celebrated = false
+        }
+    }
+
+    // 数据变化后刷新桌面小组件
+    LaunchedEffect(habits) {
+        TodayWidgetProvider.updateAll(context)
+    }
+
+    val detailHabit = habits.firstOrNull { it.id == detailId }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (detailHabit == null) {
-                KeepDayBottomBar(
-                    current = tab,
-                    onSelect = { selected ->
-                        tab = selected
-                    }
-                )
+                KeepDayBottomBar(current = tab, onSelect = { tab = it })
             }
         },
         floatingActionButton = {
@@ -252,6 +249,7 @@ fun KeepDayApp() {
                         onOpenSettings = { showSettings = true },
                         onTogglePin = { habit -> HabitStore.togglePin(habit.id) },
                         onMove = { habit, offset -> HabitStore.move(habit.id, offset) },
+                        onToggleBackfill = { habit -> backfillTarget = habit },
                         pendingFirst = pendingFirst
                     )
                 }
@@ -263,10 +261,10 @@ fun KeepDayApp() {
         HabitEditorDialog(
             initial = editorTarget,
             onDismiss = { showEditor = false },
-            onSubmit = { name, emoji, accentIndex, weekGoal, strict ->
+            onSubmit = { name, emoji, accentIndex, weekGoal, strict, allowBackfill ->
                 val target = editorTarget
                 val success = if (target == null) {
-                    HabitStore.add(name, emoji, accentIndex, weekGoal, strict)
+                    HabitStore.add(name, emoji, accentIndex, weekGoal, strict, allowBackfill)
                 } else {
                     HabitStore.edit(target.id, name, emoji, accentIndex, weekGoal, strict)
                 }
@@ -276,14 +274,57 @@ fun KeepDayApp() {
         )
     }
 
+    backfillTarget?.let { habit ->
+        AlertDialog(
+            onDismissRequest = { backfillTarget = null },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = {
+                Text(
+                    text = "关闭补卡",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "关闭后「${habit.name}」只能打当天的卡，漏掉的日期再也补不回来，" +
+                        "并且无法重新开启。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        HabitStore.toggleBackfill(habit.id)
+                        backfillTarget = null
+                        scope.launch { snackbarHostState.showSnackbar("已关闭「${habit.name}」的补卡") }
+                    }
+                ) {
+                    Text(
+                        text = "确认关闭",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { backfillTarget = null }) {
+                    Text(text = "取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        )
+    }
+
     if (showSettings) {
         SettingsSheet(
-            reminder = reminder,
             pendingFirst = pendingFirst,
             habitsCount = habits.size,
-            onReminderChange = { enabled, hour, minute ->
-                handleReminderChange(enabled, hour, minute)
-            },
+            calendarReminder = calendarReminder,
+            calendarPermissionGranted = CalendarReminder.hasPermission(context),
+            onSetCalendarReminder = { hour, minute -> setCalendarReminder(hour, minute) },
+            onRemoveCalendarReminder = { removeCalendarReminder() },
             onPendingFirstChange = { SettingsStore.updatePendingFirst(it) },
             onClearAll = {
                 HabitStore.clearAll()

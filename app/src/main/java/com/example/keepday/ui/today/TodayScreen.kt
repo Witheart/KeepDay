@@ -76,6 +76,7 @@ fun TodayScreen(
     onOpenSettings: () -> Unit,
     onTogglePin: (Habit) -> Unit,
     onMove: (Habit, Int) -> Unit,
+    onToggleBackfill: (Habit) -> Unit,
     pendingFirst: Boolean = true,
     modifier: Modifier = Modifier
 ) {
@@ -129,7 +130,8 @@ fun TodayScreen(
                     onDelete = { onDelete(habit) },
                     onTogglePin = { onTogglePin(habit) },
                     onMoveUp = { onMove(habit, -1) },
-                    onMoveDown = { onMove(habit, 1) }
+                    onMoveDown = { onMove(habit, 1) },
+                    onToggleBackfill = { onToggleBackfill(habit) }
                 )
             }
         }
@@ -261,7 +263,8 @@ private fun HabitCard(
     onDelete: () -> Unit,
     onTogglePin: () -> Unit,
     onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    onMoveDown: () -> Unit,
+    onToggleBackfill: () -> Unit
 ) {
     val accent = accentOf(habit.accentIndex)
     val done = habit.isDone(today)
@@ -387,6 +390,15 @@ private fun HabitCard(
                             onMoveDown()
                         }
                     )
+                    if (habit.allowBackfill) {
+                        DropdownMenuItem(
+                            text = { Text("关闭补卡（不可恢复）") },
+                            onClick = {
+                                menuExpanded = false
+                                onToggleBackfill()
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("编辑") },
                         onClick = {
@@ -473,7 +485,8 @@ private fun TodayScreenPreview() {
             onAdd = {},
             onOpenSettings = {},
             onTogglePin = {},
-            onMove = { _, _ -> }
+            onMove = { _, _ -> },
+            onToggleBackfill = {}
         )
     }
 }

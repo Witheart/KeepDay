@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,7 +38,10 @@ import com.example.keepday.ui.components.GradientProgressBar
 import com.example.keepday.ui.components.HeaderStat
 import com.example.keepday.ui.components.SectionHeader
 import com.example.keepday.ui.theme.accentOf
+import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
 
 @Composable
 fun StatsScreen(
@@ -51,6 +54,7 @@ fun StatsScreen(
     val todayRate = if (habits.isEmpty()) 0f else doneToday.toFloat() / habits.size
     val totalCheckIns = habits.sumOf { it.totalDays }
     val bestStreak = habits.maxOfOrNull { it.bestStreak } ?: 0
+    val yearStats = yearStats(habits, today.year)
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -94,8 +98,15 @@ fun StatsScreen(
                 )
             }
         } else {
+            item { SectionHeader(title = "${today.year} 年", count = 0, trailing = "年度概览") }
+            item { YearSummaryCard(yearStats = yearStats, year = today.year) }
+            item { MonthHeatmapCard(habits = habits, year = today.year) }
+
             item { SectionHeader(title = "最近 7 天", count = 0, trailing = "完成率趋势") }
             item { TrendCard(habits = habits, today = today) }
+
+            item { SectionHeader(title = "打卡时间", count = 0, trailing = "按打卡时刻统计") }
+            item { TimeDistributionCard(habits = habits) }
 
             item { SectionHeader(title = "各习惯完成率", count = habits.size, trailing = "最近 30 天") }
             item {
@@ -105,18 +116,64 @@ fun StatsScreen(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        habits.sortedByDescending { it.completionRate(today) }.forEachIndexed { index, habit ->
-                            HabitRateRow(habit = habit, today = today)
-                            if (index != habits.lastIndex) {
-                                Spacer(Modifier.height(14.dp))
+                        habits.sortedByDescending { it.completionRate(today) }
+                            .forEachIndexed { index, habit ->
+                                HabitRateRow(habit = habit, today = today)
+                                if (index != habits.lastIndex) {
+                                    Spacer(Modifier.height(14.dp))
+                                }
                             }
-                        }
                     }
                 }
             }
         }
     }
 }
+
+/* ------------------------------ 数据聚合 ------------------------------ */
+
+private data class YearStats(
+    val totalCheckIns: Int = 0,
+    val activeDays: Int = 0,
+    val bestMonth: Int = 0,
+    val bestMonthCount: Int = 0,
+    val averagePerActiveDay: Float = 0f
+)
+
+/** 某天完成的习惯数（epochDay → 次数）。 */
+private fun dailyCounts(habits: List<Habit>): Map<Long, Int> {
+    val counts = mutableMapOf<Long, Int>()
+    habits.forEach { habit ->
+        habit.days.forEach { day -> counts[day] = (counts[day] ?: 0) + 1 }
+    }
+    return counts
+}
+
+private fun yearStats(habits: List<Habit>, year: Int): YearStats {
+    if (habits.isEmpty()) return YearStats()
+    val counts = dailyCounts(habits)
+    var total = 0
+    var active = 0
+    val months = IntArray(12)
+    counts.forEach { (day, value) ->
+        val date = LocalDate.ofEpochDay(day)
+        if (date.year == year) {
+            total += value
+            active += 1
+            months[date.monthValue - 1] += value
+        }
+    }
+    val bestMonth = months.indices.maxByOrNull { months[it] } ?: 0
+    return YearStats(
+        totalCheckIns = total,
+        activeDays = active,
+        bestMonth = if (months[bestMonth] == 0) 0 else bestMonth + 1,
+        bestMonthCount = months[bestMonth],
+        averagePerActiveDay = if (active == 0) 0f else total.toFloat() / active
+    )
+}
+
+/* ------------------------------- 卡片 -------------------------------- */
 
 @Composable
 private fun OverviewCard(
@@ -164,6 +221,109 @@ private fun OverviewCard(
                 HeaderStat(label = "习惯", value = "$total 个")
                 HeaderStat(label = "最长连续", value = "${bestStreak}天")
             }
+        }
+    }
+}
+
+@Composable
+private fun YearSummaryCard(yearStats: YearStats, year: Int) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                YearStat(label = "打卡次数", value = "${yearStats.totalCheckIns}")
+                YearStat(label = "活跃天数", value = "${yearStats.activeDays}")
+                YearStat(
+                    label = "最活跃月份",
+                    value = if (yearStats.bestMonth == 0) "—" else "${yearStats.bestMonth} 月"
+                )
+            }
+            if (yearStats.bestMonth != 0) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "$year 年 ${yearStats.bestMonth} 月共打卡 ${yearStats.bestMonthCount} 次，" +
+                        "有记录的日子平均每天 ${String.format("%.1f", yearStats.averagePerActiveDay)} 次",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun YearStat(label: String, value: String) {
+    Column {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** 一年的月度热力图：行是月份，列是日期，颜色深浅表示当天完成的习惯数。 */
+@Composable
+private fun MonthHeatmapCard(habits: List<Habit>, year: Int) {
+    val counts = dailyCounts(habits)
+    val maxCount = (counts.values.maxOrNull() ?: 1).coerceAtLeast(1)
+    val emptyColor = MaterialTheme.colorScheme.surfaceVariant
+    val baseColor = MaterialTheme.colorScheme.primary
+
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            for (month in 1..12) {
+                val days = YearMonth.of(year, month).lengthOfMonth()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${month}月",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(30.dp)
+                    )
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        for (day in 1..31) {
+                            val color = if (day > days) {
+                                Color.Transparent
+                            } else {
+                                val count = counts[LocalDate.of(year, month, day).toEpochDay()] ?: 0
+                                if (count == 0) emptyColor
+                                else baseColor.copy(alpha = 0.25f + 0.75f * (count.toFloat() / maxCount))
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(9.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(color)
+                            )
+                        }
+                    }
+                }
+                if (month != 12) Spacer(Modifier.height(3.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "颜色越深表示当天完成的习惯越多",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -223,6 +383,87 @@ private fun TrendCard(habits: List<Habit>, today: LocalDate) {
                     )
                 }
             }
+        }
+    }
+}
+
+private val hourBuckets = listOf(
+    "凌晨" to (0 until 6),
+    "早晨" to (6 until 9),
+    "上午" to (9 until 12),
+    "下午" to (12 until 18),
+    "傍晚" to (18 until 21),
+    "夜间" to (21 until 24)
+)
+
+@Composable
+private fun TimeDistributionCard(habits: List<Habit>) {
+    val counts = IntArray(hourBuckets.size)
+    var recorded = 0
+    habits.forEach { habit ->
+        habit.dayTimes.values.forEach { millis ->
+            val hour = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).hour
+            val index = hourBuckets.indexOfFirst { hour in it.second }
+            if (index >= 0) {
+                counts[index] += 1
+                recorded += 1
+            }
+        }
+    }
+    val max = (counts.maxOrNull() ?: 0).coerceAtLeast(1)
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val track = MaterialTheme.colorScheme.surfaceVariant
+
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            hourBuckets.forEachIndexed { index, bucket ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = bucket.first,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(36.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(9.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(track)
+                    ) {
+                        if (counts[index] > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(counts[index].toFloat() / max)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Brush.horizontalGradient(listOf(primary, secondary)))
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "${counts[index]}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(22.dp),
+                        textAlign = TextAlign.End
+                    )
+                }
+                if (index != hourBuckets.lastIndex) Spacer(Modifier.height(8.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = if (recorded == 0) "还没有记录打卡时刻，从这次打卡开始就会统计"
+                else "共统计 $recorded 次打卡时刻",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -15,7 +15,9 @@ import java.time.temporal.TemporalAdjusters
  * @param strict 严格模式：必须每天打卡，漏打一天"连续天数"清零（打卡历史仍然保留）。
  * @param streakResetDay 断签发生的日期（epochDay）。只有真正漏打过才会被设置，
  *                       用来把断签之前的记录排除在连续天数之外；从未断签时为 null。
+ * @param allowBackfill 是否允许补卡。创建时选择关闭后不可再开启。
  * @param days 已打卡的日期，用 [LocalDate.toEpochDay] 存储，便于排序与比较。
+ * @param dayTimes 每个打卡日对应的打卡时刻（毫秒时间戳），用于统计与年度回顾。
  */
 data class Habit(
     val id: String,
@@ -26,10 +28,20 @@ data class Habit(
     val pinned: Boolean = false,
     val strict: Boolean = false,
     val streakResetDay: Long? = null,
+    val allowBackfill: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
-    val days: Set<Long> = emptySet()
+    val days: Set<Long> = emptySet(),
+    val dayTimes: Map<Long, Long> = emptyMap()
 ) {
     fun isDone(date: LocalDate): Boolean = days.contains(date.toEpochDay())
+
+    /** 某天的打卡时刻，老数据可能没有记录。 */
+    fun checkedAt(date: LocalDate): Instant? =
+        dayTimes[date.toEpochDay()]?.let(Instant::ofEpochMilli)
+
+    /** 今天能否补卡（今天本身不算补卡）。 */
+    fun canCheckIn(date: LocalDate, today: LocalDate = LocalDate.now()): Boolean =
+        !date.isAfter(today) && (allowBackfill || date == today)
 
     /** 累计打卡天数。 */
     val totalDays: Int get() = days.size

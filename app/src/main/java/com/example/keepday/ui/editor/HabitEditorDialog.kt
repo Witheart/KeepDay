@@ -54,13 +54,21 @@ val emojiChoices = listOf(
 fun HabitEditorDialog(
     initial: Habit?,
     onDismiss: () -> Unit,
-    onSubmit: (name: String, emoji: String, accentIndex: Int, weekGoal: Int, strict: Boolean) -> Boolean
+    onSubmit: (
+        name: String,
+        emoji: String,
+        accentIndex: Int,
+        weekGoal: Int,
+        strict: Boolean,
+        allowBackfill: Boolean
+    ) -> Boolean
 ) {
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     var emoji by remember { mutableStateOf(initial?.emoji ?: emojiChoices.first()) }
     var accentIndex by remember { mutableStateOf(initial?.accentIndex ?: 0) }
     var weekGoal by remember { mutableStateOf(initial?.weekGoal ?: 7) }
     var strict by remember { mutableStateOf(initial?.strict ?: false) }
+    var allowBackfill by remember { mutableStateOf(initial?.allowBackfill ?: true) }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -163,6 +171,57 @@ fun HabitEditorDialog(
                 }
 
                 Spacer(Modifier.height(16.dp))
+                Label("补卡设置")
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = "允许补卡",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = when {
+                                    initial == null && allowBackfill -> "可以回到过去的日期补打卡"
+                                    initial == null -> "关闭后只能打当天的卡，且无法再开启"
+                                    initial.allowBackfill -> "可以补卡（创建后仍可单向关闭）"
+                                    else -> "创建时已关闭，不可修改"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (initial == null) {
+                            Switch(
+                                checked = allowBackfill,
+                                onCheckedChange = { allowBackfill = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                        } else {
+                            Text(
+                                text = if (initial.allowBackfill) "已开启" else "已关闭",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (initial.allowBackfill) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
                 if (strict) {
                     Text(
                         text = "严格模式下必须每天打卡，无需再设置每周目标",
@@ -194,7 +253,14 @@ fun HabitEditorDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val ok = onSubmit(name, emoji, accentIndex, if (strict) 7 else weekGoal, strict)
+                    val ok = onSubmit(
+                        name,
+                        emoji,
+                        accentIndex,
+                        if (strict) 7 else weekGoal,
+                        strict,
+                        allowBackfill
+                    )
                     if (!ok) error = "名称不能为空，也不能和已有习惯重名"
                 }
             ) {

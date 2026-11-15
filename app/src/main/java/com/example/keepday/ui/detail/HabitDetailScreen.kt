@@ -43,10 +43,12 @@ import com.example.keepday.ui.theme.AccentGradient
 import com.example.keepday.ui.theme.accentOf
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val weekdayLabels = listOf("一", "二", "三", "四", "五", "六", "日")
+private val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 fun HabitDetailScreen(
@@ -197,6 +199,14 @@ private fun HeroCard(habit: Habit, today: LocalDate, accent: AccentGradient) {
                     height = 8.dp
                 )
             }
+            habit.checkedAt(today)?.let { at ->
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "今天 " + at.atZone(ZoneId.systemDefault()).format(timeFormatter) + " 完成打卡",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accent.start
+                )
+            }
         }
     }
 }
@@ -317,7 +327,7 @@ private fun CalendarCard(
                                     day = day,
                                     done = doneDays.contains(day),
                                     isToday = date == today,
-                                    enabled = !date.isAfter(today),
+                                    enabled = habit.canCheckIn(date, today),
                                     accent = accent,
                                     onClick = { onToggleDate(date) }
                                 )
@@ -330,7 +340,11 @@ private fun CalendarCard(
 
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "本月已打卡 ${doneDays.size} 天 · 点按日期可补卡或取消",
+                text = if (habit.allowBackfill) {
+                    "本月已打卡 ${doneDays.size} 天 · 点按日期可补卡或取消"
+                } else {
+                    "本月已打卡 ${doneDays.size} 天 · 已关闭补卡，只能点今天"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
