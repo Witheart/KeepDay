@@ -68,6 +68,8 @@ class TodayWidgetProvider : AppWidgetProvider() {
         private fun buildViews(context: Context): RemoteViews {
             HabitStore.init(context)
             val today = LocalDate.now()
+            // 组件刷新时也清算一次严格模式，避免用户长期不开 App 导致漏打状态滞后
+            HabitStore.refreshStrict(today)
             val habits = HabitStore.habits.value
             val ordered = habits.sortedWith(
                 compareByDescending<Habit> { it.pinned }.thenBy { it.isDone(today) }

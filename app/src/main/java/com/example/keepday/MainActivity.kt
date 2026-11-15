@@ -21,4 +21,10 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // 长时间挂在后台再回来时，跨天漏打需要立刻清算
+        HabitStore.refreshStrict()
+    }
 }

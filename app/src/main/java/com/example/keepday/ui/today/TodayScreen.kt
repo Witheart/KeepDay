@@ -311,6 +311,20 @@ private fun HabitCard(
                             Spacer(Modifier.width(4.dp))
                             Text(text = "📌", fontSize = 11.sp)
                         }
+                        if (habit.strict) {
+                            Spacer(Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                            ) {
+                                Text(
+                                    text = "严格",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
                     }
                     Spacer(Modifier.height(5.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -321,7 +335,7 @@ private fun HabitCard(
                         )
                         Dot()
                         Text(
-                            text = "本周 ${habit.weekDoneCount(today)}/${habit.weekGoal}",
+                            text = "本周 ${habit.weekDoneCount(today)}/${habit.effectiveWeekGoal}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

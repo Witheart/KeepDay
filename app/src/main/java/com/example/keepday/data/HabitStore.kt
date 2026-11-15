@@ -19,12 +19,16 @@ object HabitStore {
     private const val PREFS_NAME = "keepday_store"
     private const val KEY_HABITS = "habits"
     private const val KEY_VERSION = "schema_version"
-    private const val SCHEMA_VERSION = 2
+    private const val SCHEMA_VERSION = 3
 
     private var prefs: SharedPreferences? = null
 
     private val _habits = MutableStateFlow<List<Habit>>(emptyList())
     val habits: StateFlow<List<Habit>> = _habits.asStateFlow()
+
+    /** 严格模式断签清零的提示队列，界面消费后清除。 */
+    private val _resetNotices = MutableStateFlow<List<String>>(emptyList())
+    val resetNotices: StateFlow<List<String>> = _resetNotices.asStateFlow()
 
     fun init(context: Context) {
         if (prefs != null) return
@@ -32,12 +36,19 @@ object HabitStore {
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs = storage
         _habits.value = decode(storage.getString(KEY_HABITS, null))
+        refreshStrict()
     }
 
     fun find(id: String): Habit? = _habits.value.firstOrNull { it.id == id }
 
     /** @return 是否添加成功（名称为空或重名时返回 false）。 */
-    fun add(name: String, emoji: String, accentIndex: Int, weekGoal: Int = 7): Boolean {
+    fun add(
+        name: String,
+        emoji: String,
+        accentIndex: Int,
+        weekGoal: Int = 7,
+        strict: Boolean = false
+    ): Boolean {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return false
         if (_habits.value.any { it.name.equals(trimmed, ignoreCase = true) }) return false
@@ -46,28 +57,45 @@ object HabitStore {
             name = trimmed,
             emoji = emoji,
             accentIndex = accentIndex,
-            weekGoal = weekGoal.coerceIn(1, 7)
+            weekGoal = weekGoal.coerceIn(1, 7),
+            strict = strict,
+            strictSince = if (strict) LocalDate.now().toEpochDay() else null
         )
         persist(_habits.value + habit)
         return true
     }
 
     /** 编辑已有习惯，名称重复时返回 false。 */
-    fun edit(id: String, name: String, emoji: String, accentIndex: Int, weekGoal: Int): Boolean {
+    fun edit(
+        id: String,
+        name: String,
+        emoji: String,
+        accentIndex: Int,
+        weekGoal: Int,
+        strict: Boolean
+    ): Boolean {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return false
         if (_habits.value.any { it.id != id && it.name.equals(trimmed, ignoreCase = true) }) return false
+        val today = LocalDate.now().toEpochDay()
         persist(
             _habits.value.map { habit ->
-                if (habit.id == id) {
+                if (habit.id != id) {
+                    habit
+                } else {
                     habit.copy(
                         name = trimmed,
                         emoji = emoji,
                         accentIndex = accentIndex,
-                        weekGoal = weekGoal.coerceIn(1, 7)
+                        weekGoal = weekGoal.coerceIn(1, 7),
+                        strict = strict,
+                        // 开启严格模式时从今天起算；关闭时不再需要判定期限
+                        strictSince = when {
+                            !strict -> null
+                            habit.strict -> habit.strictSince
+                            else -> today
+                        }
                     )
-                } else {
-                    habit
                 }
             }
         )
@@ -137,6 +165,32 @@ object HabitStore {
 
     fun clearAll() {
         persist(emptyList())
+        _resetNotices.value = emptyList()
+    }
+
+    /**
+     * 检查严格模式的习惯是否漏打：只要从严格模式生效日到今天之前有一天没打卡，
+     * 就把该习惯的历史记录全部清零，并把判定起点重置为今天。
+     * 应用启动、回到前台、桌面组件刷新时都会调用，保证离开应用期间漏打也能被清算。
+     */
+    fun refreshStrict(today: LocalDate = LocalDate.now()) {
+        val todayEpoch = today.toEpochDay()
+        val resetNames = mutableListOf<String>()
+
+        val updated = _habits.value.map { habit ->
+            if (!habit.strictResetDue(today)) return@map habit
+            resetNames += habit.name
+            habit.copy(days = emptySet(), strictSince = todayEpoch)
+        }
+
+        if (resetNames.isNotEmpty()) {
+            persist(updated)
+            _resetNotices.value = _resetNotices.value + resetNames
+        }
+    }
+
+    fun consumeResetNotices() {
+        _resetNotices.value = emptyList()
     }
 
     private fun persist(habits: List<Habit>) {
@@ -157,6 +211,8 @@ object HabitStore {
             item.put("accentIndex", habit.accentIndex)
             item.put("weekGoal", habit.weekGoal)
             item.put("pinned", habit.pinned)
+            item.put("strict", habit.strict)
+            habit.strictSince?.let { item.put("strictSince", it) }
             item.put("createdAt", habit.createdAt)
             val days = JSONArray()
             habit.days.sorted().forEach(days::put)
@@ -185,6 +241,8 @@ object HabitStore {
                     accentIndex = item.optInt("accentIndex", 0),
                     weekGoal = item.optInt("weekGoal", 7),
                     pinned = item.optBoolean("pinned", false),
+                    strict = item.optBoolean("strict", false),
+                    strictSince = if (item.has("strictSince")) item.optLong("strictSince") else null,
                     createdAt = item.optLong("createdAt", 0L),
                     days = days
                 )

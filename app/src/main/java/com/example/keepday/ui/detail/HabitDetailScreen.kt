@@ -155,9 +155,14 @@ private fun HeroCard(habit: Habit, today: LocalDate, accent: AccentGradient) {
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = if (habit.weekGoal == 7) "每天坚持" else "每周目标 ${habit.weekGoal} 天",
+                        text = when {
+                            habit.strict -> "严格模式 · 必须每天打卡，断签清零"
+                            habit.weekGoal == 7 -> "每天坚持"
+                            else -> "每周目标 ${habit.weekGoal} 天"
+                        },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (habit.strict) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -180,7 +185,7 @@ private fun HeroCard(habit: Habit, today: LocalDate, accent: AccentGradient) {
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "本周 ${habit.weekDoneCount(today)}/${habit.weekGoal}",
+                    text = "本周 ${habit.weekDoneCount(today)}/${habit.effectiveWeekGoal}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

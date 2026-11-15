@@ -144,6 +144,20 @@ fun KeepDayApp() {
         TodayWidgetProvider.updateAll(context)
     }
 
+    // 严格模式断签清零的提示
+    val resetNotices by HabitStore.resetNotices.collectAsState()
+    LaunchedEffect(resetNotices) {
+        if (resetNotices.isNotEmpty()) {
+            val message = if (resetNotices.size == 1) {
+                "「${resetNotices.first()}」断签，记录已清零"
+            } else {
+                "${resetNotices.size} 个习惯断签，记录已清零"
+            }
+            HabitStore.consumeResetNotices()
+            snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Long)
+        }
+    }
+
     val detailHabit = habits.firstOrNull { it.id == detailId }
 
     fun deleteHabit(habit: Habit) {
@@ -249,12 +263,12 @@ fun KeepDayApp() {
         HabitEditorDialog(
             initial = editorTarget,
             onDismiss = { showEditor = false },
-            onSubmit = { name, emoji, accentIndex, weekGoal ->
+            onSubmit = { name, emoji, accentIndex, weekGoal, strict ->
                 val target = editorTarget
                 val success = if (target == null) {
-                    HabitStore.add(name, emoji, accentIndex, weekGoal)
+                    HabitStore.add(name, emoji, accentIndex, weekGoal, strict)
                 } else {
-                    HabitStore.edit(target.id, name, emoji, accentIndex, weekGoal)
+                    HabitStore.edit(target.id, name, emoji, accentIndex, weekGoal, strict)
                 }
                 if (success) showEditor = false
                 success
