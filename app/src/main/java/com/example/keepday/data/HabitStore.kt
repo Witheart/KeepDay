@@ -175,6 +175,26 @@ object HabitStore {
         return true
     }
 
+    /** 一键完成今天所有还没打卡的习惯，返回实际完成的数量。 */
+    fun completeAllToday(today: LocalDate = LocalDate.now()): Int {
+        val epochDay = today.toEpochDay()
+        val now = System.currentTimeMillis()
+        var completed = 0
+        val updated = _habits.value.map { habit ->
+            if (habit.isDone(today)) {
+                habit
+            } else {
+                completed++
+                habit.copy(
+                    days = habit.days + epochDay,
+                    dayTimes = habit.dayTimes + (epochDay to now)
+                )
+            }
+        }
+        if (completed > 0) persist(updated)
+        return completed
+    }
+
     /**
      * 关闭补卡能力（单向操作，之后不可再开启）。
      * @return 是否发生了变化。

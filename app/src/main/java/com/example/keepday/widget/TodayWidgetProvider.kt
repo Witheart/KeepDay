@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
 import com.example.keepday.MainActivity
@@ -17,7 +18,7 @@ import java.time.LocalDate
 
 /**
  * 桌面小组件：展示今日打卡进度和待完成的习惯。
- * 每行习惯都可直接点击打卡（无需打开应用）；点空白处打开应用。
+ * 每行习惯都可直接点击打卡；高度可自由拖动，行数会随高度自动增减。
  */
 class TodayWidgetProvider : AppWidgetProvider() {
 
@@ -26,8 +27,19 @@ class TodayWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        val views = buildViews(context)
-        appWidgetIds.forEach { id -> appWidgetManager.updateAppWidget(id, views) }
+        appWidgetIds.forEach { id ->
+            appWidgetManager.updateAppWidget(id, buildViews(context, id))
+        }
+    }
+
+    /** 用户拖动改尺寸时按新高度重排内容。 */
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle
+    ) {
+        appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, appWidgetId))
     }
 
     companion object {
@@ -61,11 +73,23 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 ComponentName(context, TodayWidgetProvider::class.java)
             )
             if (ids.isEmpty()) return
-            val views = buildViews(context)
-            ids.forEach { id -> manager.updateAppWidget(id, views) }
+            ids.forEach { id -> manager.updateAppWidget(id, buildViews(context, id)) }
         }
 
-        private fun buildViews(context: Context): RemoteViews {
+        /** 根据组件当前高度决定显示几行，高度变小自动收敛。 */
+        private fun rowCountFor(context: Context, appWidgetId: Int): Int {
+            val manager = AppWidgetManager.getInstance(context) ?: return MAX_ROWS
+            val heightDp = manager.getAppWidgetOptions(appWidgetId)
+                .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 170)
+            return when {
+                heightDp >= 170 -> 4
+                heightDp >= 145 -> 3
+                heightDp >= 120 -> 2
+                else -> 1
+            }
+        }
+
+        private fun buildViews(context: Context, appWidgetId: Int): RemoteViews {
             HabitStore.init(context)
             val today = LocalDate.now()
             // 组件刷新时也清算一次严格模式，避免用户长期不开 App 导致漏打状态滞后
@@ -75,6 +99,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 compareByDescending<Habit> { it.pinned }.thenBy { it.isDone(today) }
             )
             val done = habits.count { it.isDone(today) }
+            val visibleRows = rowCountFor(context, appWidgetId)
 
             val views = RemoteViews(context.packageName, R.layout.widget_today)
             views.setTextViewText(
@@ -86,11 +111,14 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
             val empty = habits.isEmpty()
             views.setViewVisibility(R.id.widget_empty, if (empty) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.widget_hint, if (empty) View.GONE else View.VISIBLE)
+            views.setViewVisibility(
+                R.id.widget_hint,
+                if (empty || visibleRows <= 2) View.GONE else View.VISIBLE
+            )
 
             for (index in 0 until MAX_ROWS) {
                 val habit = ordered.getOrNull(index)
-                if (habit == null) {
+                if (habit == null || index >= visibleRows) {
                     views.setViewVisibility(rowContainers[index], View.GONE)
                     continue
                 }

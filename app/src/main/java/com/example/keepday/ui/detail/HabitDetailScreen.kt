@@ -207,6 +207,15 @@ private fun HeroCard(habit: Habit, today: LocalDate, accent: AccentGradient) {
                     color = accent.start
                 )
             }
+            val backfills = habit.backfillCount()
+            if (backfills > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "累计 ${habit.totalDays} 天，其中补卡 $backfills 次",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -323,11 +332,13 @@ private fun CalendarCard(
                         Box(modifier = Modifier.weight(1f)) {
                             if (day != null) {
                                 val date = month.atDay(day)
+                                val done = doneDays.contains(day)
                                 DayCell(
                                     day = day,
-                                    done = doneDays.contains(day),
+                                    done = done,
                                     isToday = date == today,
                                     enabled = habit.canCheckIn(date, today),
+                                    backfilled = done && habit.isBackfilled(date),
                                     accent = accent,
                                     onClick = { onToggleDate(date) }
                                 )
@@ -341,7 +352,7 @@ private fun CalendarCard(
             Spacer(Modifier.height(10.dp))
             Text(
                 text = if (habit.allowBackfill) {
-                    "本月已打卡 ${doneDays.size} 天 · 点按日期可补卡或取消"
+                    "本月已打卡 ${doneDays.size} 天 · 实心为当天打卡，描边为补卡"
                 } else {
                     "本月已打卡 ${doneDays.size} 天 · 已关闭补卡，只能点今天"
                 },
@@ -380,6 +391,7 @@ private fun DayCell(
     done: Boolean,
     isToday: Boolean,
     enabled: Boolean,
+    backfilled: Boolean,
     accent: AccentGradient,
     onClick: () -> Unit
 ) {
@@ -391,6 +403,11 @@ private fun DayCell(
             .clip(shape)
             .then(
                 when {
+                    // 补卡：描边 + 浅填充，与当天实心打卡区分开
+                    done && backfilled -> Modifier
+                        .background(accent.start.copy(alpha = 0.16f))
+                        .border(1.5.dp, accent.start, shape)
+
                     done -> Modifier.background(Brush.linearGradient(listOf(accent.start, accent.end)))
                     isToday -> Modifier.border(1.5.dp, accent.start, shape)
                     else -> Modifier
@@ -404,6 +421,7 @@ private fun DayCell(
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (done || isToday) FontWeight.SemiBold else FontWeight.Normal,
             color = when {
+                done && backfilled -> accent.start
                 done -> Color.White
                 !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                 isToday -> accent.start

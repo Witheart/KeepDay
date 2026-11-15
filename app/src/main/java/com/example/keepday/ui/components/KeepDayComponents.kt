@@ -202,7 +202,12 @@ fun HeaderStat(label: String, value: String) {
 }
 
 @Composable
-fun SectionHeader(title: String, count: Int, trailing: String? = null) {
+fun SectionHeader(
+    title: String,
+    count: Int,
+    trailing: String? = null,
+    onTrailingClick: (() -> Unit)? = null
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -230,11 +235,26 @@ fun SectionHeader(title: String, count: Int, trailing: String? = null) {
         }
         Spacer(Modifier.weight(1f))
         if (trailing != null) {
-            Text(
-                text = trailing,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (onTrailingClick != null) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    modifier = Modifier.clickable(onClick = onTrailingClick)
+                ) {
+                    Text(
+                        text = trailing,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            } else {
+                Text(
+                    text = trailing,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

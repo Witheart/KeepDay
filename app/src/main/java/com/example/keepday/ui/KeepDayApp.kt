@@ -50,6 +50,7 @@ import com.example.keepday.data.BackupManager
 import com.example.keepday.data.Habit
 import com.example.keepday.data.HabitStore
 import com.example.keepday.data.SettingsStore
+import com.example.keepday.ui.components.CelebrationOverlay
 import com.example.keepday.ui.detail.HabitDetailScreen
 import com.example.keepday.ui.editor.HabitEditorDialog
 import com.example.keepday.ui.settings.SettingsSheet
@@ -196,14 +197,18 @@ fun KeepDayApp() {
         }
     }
 
-    // 当天全部完成时给一次正反馈，只在状态翻转时触发
+    // 当天全部完成时播放庆祝动画，只在状态翻转时触发
     val doneToday = habits.count { it.isDone(today) }
-    var celebrated by remember { mutableStateOf(false) }
+    var celebrating by remember { mutableStateOf(false) }
+    // 首次进入如果已经全部完成，就直接视为"庆祝过了"，避免每次打开都放动画
+    var celebrated by remember {
+        mutableStateOf(habits.isNotEmpty() && doneToday == habits.size)
+    }
     LaunchedEffect(doneToday, habits.size) {
         val allDone = habits.isNotEmpty() && doneToday == habits.size
         if (allDone && !celebrated) {
             celebrated = true
-            snackbarHostState.showSnackbar(message = "🎉 今天的习惯全部完成，继续保持")
+            celebrating = true
         } else if (!allDone) {
             celebrated = false
         }
@@ -299,9 +304,21 @@ fun KeepDayApp() {
                         onTogglePin = { habit -> HabitStore.togglePin(habit.id) },
                         onMove = { habit, offset -> HabitStore.move(habit.id, offset) },
                         onToggleBackfill = { habit -> backfillTarget = habit },
+                        onCompleteAll = {
+                            val completed = HabitStore.completeAllToday()
+                            if (completed > 0) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("已一键完成 $completed 个习惯")
+                                }
+                            }
+                        },
                         pendingFirst = pendingFirst
                     )
                 }
+            }
+
+            if (celebrating) {
+                CelebrationOverlay(onFinished = { celebrating = false })
             }
         }
     }

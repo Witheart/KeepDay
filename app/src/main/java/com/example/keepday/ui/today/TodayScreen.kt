@@ -77,6 +77,7 @@ fun TodayScreen(
     onTogglePin: (Habit) -> Unit,
     onMove: (Habit, Int) -> Unit,
     onToggleBackfill: (Habit) -> Unit,
+    onCompleteAll: () -> Unit,
     pendingFirst: Boolean = true,
     modifier: Modifier = Modifier
 ) {
@@ -106,7 +107,15 @@ fun TodayScreen(
                 allDone = allDone
             )
         }
-        item { SectionHeader(title = "我的习惯", count = habits.size, trailing = "每天一点点") }
+        item {
+            val pending = habits.size - doneToday
+            SectionHeader(
+                title = "我的习惯",
+                count = habits.size,
+                trailing = if (pending > 0) "一键完成" else "每天一点点",
+                onTrailingClick = if (pending > 0) onCompleteAll else null
+            )
+        }
 
         if (habits.isEmpty()) {
             item {
@@ -486,7 +495,8 @@ private fun TodayScreenPreview() {
             onOpenSettings = {},
             onTogglePin = {},
             onMove = { _, _ -> },
-            onToggleBackfill = {}
+            onToggleBackfill = {},
+            onCompleteAll = {}
         )
     }
 }

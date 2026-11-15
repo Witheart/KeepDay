@@ -39,6 +39,20 @@ data class Habit(
     fun checkedAt(date: LocalDate): Instant? =
         dayTimes[date.toEpochDay()]?.let(Instant::ofEpochMilli)
 
+    /**
+     * 该日期是否是补卡：打卡动作发生在后面的某一天，说明是回头补的。
+     * 老数据没有记录打卡时刻时一律按"当天打卡"处理。
+     */
+    fun isBackfilled(date: LocalDate): Boolean {
+        val at = dayTimes[date.toEpochDay()] ?: return false
+        val checkedDate = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate()
+        return checkedDate != date
+    }
+
+    /** 累计补卡次数。 */
+    fun backfillCount(): Int =
+        days.count { day -> isBackfilled(LocalDate.ofEpochDay(day)) }
+
     /** 今天能否补卡（今天本身不算补卡）。 */
     fun canCheckIn(date: LocalDate, today: LocalDate = LocalDate.now()): Boolean =
         !date.isAfter(today) && (allowBackfill || date == today)
