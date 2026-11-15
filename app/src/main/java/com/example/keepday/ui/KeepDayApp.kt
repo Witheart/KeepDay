@@ -149,9 +149,9 @@ fun KeepDayApp() {
     LaunchedEffect(resetNotices) {
         if (resetNotices.isNotEmpty()) {
             val message = if (resetNotices.size == 1) {
-                "「${resetNotices.first()}」断签，记录已清零"
+                "「${resetNotices.first()}」断签，连续天数已清零"
             } else {
-                "${resetNotices.size} 个习惯断签，记录已清零"
+                "${resetNotices.size} 个习惯断签，连续天数已清零"
             }
             HabitStore.consumeResetNotices()
             snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Long)

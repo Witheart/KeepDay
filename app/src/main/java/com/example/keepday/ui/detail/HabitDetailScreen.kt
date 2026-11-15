@@ -156,7 +156,7 @@ private fun HeroCard(habit: Habit, today: LocalDate, accent: AccentGradient) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = when {
-                            habit.strict -> "严格模式 · 必须每天打卡，断签清零"
+                            habit.strict -> "严格模式 · 漏打一天连续天数清零"
                             habit.weekGoal == 7 -> "每天坚持"
                             else -> "每周目标 ${habit.weekGoal} 天"
                         },

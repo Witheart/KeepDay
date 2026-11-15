@@ -12,8 +12,9 @@ import java.time.temporal.TemporalAdjusters
  * 一个需要坚持的习惯。
  *
  * @param weekGoal 每周目标打卡次数（1~7），7 表示每天都打卡。
- * @param strict 严格模式：必须每天打卡，漏打则历史记录全部清零。
- * @param strictSince 严格模式生效的起始日期（epochDay），用于判断从哪天开始算漏打。
+ * @param strict 严格模式：必须每天打卡，漏打一天"连续天数"清零（打卡历史仍然保留）。
+ * @param strictSince 连续天数的计数起点（epochDay）。严格模式断签后会被重置为断签当天，
+ *                    因此此前的历史记录不再计入连续天数。
  * @param days 已打卡的日期，用 [LocalDate.toEpochDay] 存储，便于排序与比较。
  */
 data class Habit(
@@ -44,20 +45,24 @@ data class Habit(
     val effectiveWeekGoal: Int get() = if (strict) 7 else weekGoal.coerceIn(1, 7)
 
     /**
-     * 当前连续打卡天数。今天还没打卡时，从昨天开始往前数，
-     * 这样早上打开应用不会看到"连续天数归零"。
+     * 从 [today] 往回数连续打卡天数。
+     * 今天还没打卡时从昨天开始数，这样早上打开应用不会看到"连续天数归零"；
+     * 严格模式断签后 [strictSince] 会被设为断签当天，更早的记录不再计入连续。
      */
-    val currentStreak: Int
-        get() {
-            var cursor = LocalDate.now()
-            if (!isDone(cursor)) cursor = cursor.minusDays(1)
-            var streak = 0
-            while (isDone(cursor)) {
-                streak++
-                cursor = cursor.minusDays(1)
-            }
-            return streak
+    fun streakAt(today: LocalDate = LocalDate.now()): Int {
+        val floor = strictSince ?: createdDate.toEpochDay()
+        var cursor = today
+        if (!isDone(cursor)) cursor = cursor.minusDays(1)
+        var streak = 0
+        while (cursor.toEpochDay() >= floor && isDone(cursor)) {
+            streak++
+            cursor = cursor.minusDays(1)
         }
+        return streak
+    }
+
+    /** 当前连续打卡天数。 */
+    val currentStreak: Int get() = streakAt()
 
     /** 历史最长连续打卡天数。 */
     val bestStreak: Int
@@ -110,12 +115,8 @@ data class Habit(
      * 最近 [window] 天的完成率，最早不早于创建日期，避免新习惯显示 0%。
      */
     fun completionRate(today: LocalDate = LocalDate.now(), window: Int = 30): Float {
-        // 严格模式清零后，完成率从清零那天重新算，不把已作废的历史算成"缺卡"
-        var anchor = createdDate
-        val since = strictSince?.let { LocalDate.ofEpochDay(it) }
-        if (strict && since != null && since.isAfter(anchor)) {
-            anchor = since
-        }
+        // 严格模式只清连续天数，历史打卡记录仍然有效，完成率按真实历史计算
+        val anchor = createdDate
         val windowStart = today.minusDays(window.toLong() - 1)
         val start = if (anchor.isAfter(windowStart)) anchor else windowStart
         val span = ChronoUnit.DAYS.between(start, today).toInt() + 1

@@ -169,9 +169,9 @@ object HabitStore {
     }
 
     /**
-     * 检查严格模式的习惯是否漏打：只要从严格模式生效日到今天之前有一天没打卡，
-     * 就把该习惯的历史记录全部清零，并把判定起点重置为今天。
-     * 应用启动、回到前台、桌面组件刷新时都会调用，保证离开应用期间漏打也能被清算。
+     * 检查严格模式的习惯是否漏打：只要从计数起点到今天之前有一天没打卡，
+     * 就把"连续天数"清零（把计数起点重置为今天），历史打卡记录保持不变。
+     * 应用启动、回到前台、桌面组件刷新时都会调用，保证离开应用期间漏打也能被处理。
      */
     fun refreshStrict(today: LocalDate = LocalDate.now()) {
         val todayEpoch = today.toEpochDay()
@@ -180,7 +180,7 @@ object HabitStore {
         val updated = _habits.value.map { habit ->
             if (!habit.strictResetDue(today)) return@map habit
             resetNames += habit.name
-            habit.copy(days = emptySet(), strictSince = todayEpoch)
+            habit.copy(strictSince = todayEpoch)
         }
 
         if (resetNames.isNotEmpty()) {

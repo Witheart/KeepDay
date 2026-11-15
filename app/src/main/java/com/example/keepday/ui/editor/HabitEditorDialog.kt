@@ -142,7 +142,7 @@ fun HabitEditorDialog(
                             )
                             Spacer(Modifier.height(3.dp))
                             Text(
-                                text = "开启后每天都要打卡，漏打一天历史记录会被清空",
+                                text = "开启后每天都要打卡，漏打一天连续天数清零（历史记录保留）",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (strict) MaterialTheme.colorScheme.error
                                 else MaterialTheme.colorScheme.onSurfaceVariant
