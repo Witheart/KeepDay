@@ -59,7 +59,8 @@ object HabitStore {
             accentIndex = accentIndex,
             weekGoal = weekGoal.coerceIn(1, 7),
             strict = strict,
-            strictSince = if (strict) LocalDate.now().toEpochDay() else null
+            // 刚开启严格模式不算断签，只有真的漏打才会写入清零点
+            streakResetDay = null
         )
         persist(_habits.value + habit)
         return true
@@ -77,7 +78,6 @@ object HabitStore {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return false
         if (_habits.value.any { it.id != id && it.name.equals(trimmed, ignoreCase = true) }) return false
-        val today = LocalDate.now().toEpochDay()
         persist(
             _habits.value.map { habit ->
                 if (habit.id != id) {
@@ -89,12 +89,8 @@ object HabitStore {
                         accentIndex = accentIndex,
                         weekGoal = weekGoal.coerceIn(1, 7),
                         strict = strict,
-                        // 开启严格模式时从今天起算；关闭时不再需要判定期限
-                        strictSince = when {
-                            !strict -> null
-                            habit.strict -> habit.strictSince
-                            else -> today
-                        }
+                        // 关闭时清除断签点；新开启时保持"未断签"，已有的连续天数不受影响
+                        streakResetDay = if (strict && habit.strict) habit.streakResetDay else null
                     )
                 }
             }
@@ -180,7 +176,7 @@ object HabitStore {
         val updated = _habits.value.map { habit ->
             if (!habit.strictResetDue(today)) return@map habit
             resetNames += habit.name
-            habit.copy(strictSince = todayEpoch)
+            habit.copy(streakResetDay = todayEpoch)
         }
 
         if (resetNames.isNotEmpty()) {
@@ -212,7 +208,7 @@ object HabitStore {
             item.put("weekGoal", habit.weekGoal)
             item.put("pinned", habit.pinned)
             item.put("strict", habit.strict)
-            habit.strictSince?.let { item.put("strictSince", it) }
+            habit.streakResetDay?.let { item.put("streakResetDay", it) }
             item.put("createdAt", habit.createdAt)
             val days = JSONArray()
             habit.days.sorted().forEach(days::put)
@@ -242,7 +238,9 @@ object HabitStore {
                     weekGoal = item.optInt("weekGoal", 7),
                     pinned = item.optBoolean("pinned", false),
                     strict = item.optBoolean("strict", false),
-                    strictSince = if (item.has("strictSince")) item.optLong("strictSince") else null,
+                    // 旧版本的 strictSince 是"生效日"而非"断签日"，升级时丢弃，
+                    // 避免历史数据被误判成断签
+                    streakResetDay = if (item.has("streakResetDay")) item.optLong("streakResetDay") else null,
                     createdAt = item.optLong("createdAt", 0L),
                     days = days
                 )

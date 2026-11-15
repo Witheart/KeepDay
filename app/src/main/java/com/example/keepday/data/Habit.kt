@@ -13,8 +13,8 @@ import java.time.temporal.TemporalAdjusters
  *
  * @param weekGoal 每周目标打卡次数（1~7），7 表示每天都打卡。
  * @param strict 严格模式：必须每天打卡，漏打一天"连续天数"清零（打卡历史仍然保留）。
- * @param strictSince 连续天数的计数起点（epochDay）。严格模式断签后会被重置为断签当天，
- *                    因此此前的历史记录不再计入连续天数。
+ * @param streakResetDay 断签发生的日期（epochDay）。只有真正漏打过才会被设置，
+ *                       用来把断签之前的记录排除在连续天数之外；从未断签时为 null。
  * @param days 已打卡的日期，用 [LocalDate.toEpochDay] 存储，便于排序与比较。
  */
 data class Habit(
@@ -25,7 +25,7 @@ data class Habit(
     val weekGoal: Int = 7,
     val pinned: Boolean = false,
     val strict: Boolean = false,
-    val strictSince: Long? = null,
+    val streakResetDay: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val days: Set<Long> = emptySet()
 ) {
@@ -46,15 +46,16 @@ data class Habit(
 
     /**
      * 从 [today] 往回数连续打卡天数。
-     * 今天还没打卡时从昨天开始数，这样早上打开应用不会看到"连续天数归零"；
-     * 严格模式断签后 [strictSince] 会被设为断签当天，更早的记录不再计入连续。
+     * 今天还没打卡时从昨天开始数，这样早上打开应用不会看到"连续天数归零"。
+     * 正常情况只看实际打卡记录，补卡也能接上；只有严格模式真的断过签，
+     * 才会以 [streakResetDay] 为界，把断签之前的记录排除在外。
      */
     fun streakAt(today: LocalDate = LocalDate.now()): Int {
-        val floor = strictSince ?: createdDate.toEpochDay()
+        val floor = streakResetDay
         var cursor = today
         if (!isDone(cursor)) cursor = cursor.minusDays(1)
         var streak = 0
-        while (cursor.toEpochDay() >= floor && isDone(cursor)) {
+        while (isDone(cursor) && (floor == null || cursor.toEpochDay() >= floor)) {
             streak++
             cursor = cursor.minusDays(1)
         }
@@ -98,7 +99,7 @@ data class Habit(
      */
     fun strictResetDue(today: LocalDate = LocalDate.now()): Boolean {
         if (!strict) return false
-        val since = strictSince ?: createdDate.toEpochDay()
+        val since = streakResetDay ?: createdDate.toEpochDay()
         val yesterday = today.minusDays(1).toEpochDay()
         if (since > yesterday) return false
         return (since..yesterday).any { day -> day !in days }
