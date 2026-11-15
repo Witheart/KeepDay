@@ -253,7 +253,18 @@ fun KeepDayApp() {
                         habit = currentDetail,
                         today = today,
                         onBack = { detailId = null },
-                        onToggleDate = { date -> HabitStore.toggle(currentDetail.id, date) },
+                        onToggleDate = { date ->
+                            val isBackfill = date.isBefore(today) && !currentDetail.isDone(date)
+                            val changed = HabitStore.toggle(currentDetail.id, date)
+                            if (changed && isBackfill) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "补卡干嘛？是不是又忘了打卡？小心揍你屁屁",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            }
+                        },
                         onEdit = {
                             editorTarget = currentDetail
                             showEditor = true
