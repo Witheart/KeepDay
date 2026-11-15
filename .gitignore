@@ -9,3 +9,7 @@
 .cxx
 local.properties
 .kotlin
+# 签名相关：密钥库和密码不要进版本库
+keystore.properties
+*.jks
+*.keystore
