@@ -68,6 +68,7 @@ private enum class AppTab(val label: String, val glyph: String) {
 fun KeepDayApp() {
     val habits by HabitStore.habits.collectAsState()
     val pendingFirst by SettingsStore.pendingFirst.collectAsState()
+    val themeMode by SettingsStore.themeMode.collectAsState()
     val calendarReminder by SettingsStore.calendarReminder.collectAsState()
     val today = LocalDate.now()
     val scope = rememberCoroutineScope()
@@ -407,6 +408,8 @@ fun KeepDayApp() {
         SettingsSheet(
             pendingFirst = pendingFirst,
             habitsCount = habits.size,
+            themeMode = themeMode,
+            onThemeModeChange = { SettingsStore.updateThemeMode(it) },
             calendarReminder = calendarReminder,
             calendarPermissionGranted = CalendarReminder.hasPermission(context),
             onSetCalendarReminder = { hour, minute -> setCalendarReminder(hour, minute) },

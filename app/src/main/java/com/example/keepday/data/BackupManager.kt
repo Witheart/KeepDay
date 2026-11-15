@@ -29,6 +29,7 @@ object BackupManager {
         root.put("schema", SCHEMA_VERSION)
         root.put("exportedAt", System.currentTimeMillis())
         root.put("pendingFirst", SettingsStore.pendingFirst.value)
+        root.put("themeMode", SettingsStore.themeMode.value.name)
         val calendar = SettingsStore.calendarReminder.value
         root.put(
             "calendarReminder",
@@ -55,6 +56,9 @@ object BackupManager {
         }
         if (root.has("pendingFirst")) {
             SettingsStore.updatePendingFirst(root.optBoolean("pendingFirst", true))
+        }
+        if (root.has("themeMode")) {
+            SettingsStore.updateThemeMode(ThemeMode.fromName(root.optString("themeMode")))
         }
         root.optJSONObject("calendarReminder")?.let { calendar ->
             SettingsStore.updateCalendarReminder(

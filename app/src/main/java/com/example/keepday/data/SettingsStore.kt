@@ -24,6 +24,7 @@ object SettingsStore {
     private const val KEY_CAL_HOUR = "calendar_reminder_hour"
     private const val KEY_CAL_MINUTE = "calendar_reminder_minute"
     private const val KEY_CAL_CREATED = "calendar_reminder_created"
+    private const val KEY_THEME_MODE = "theme_mode"
 
     private var prefs: SharedPreferences? = null
 
@@ -34,17 +35,26 @@ object SettingsStore {
     private val _calendarReminder = MutableStateFlow(CalendarReminderSetting())
     val calendarReminder: StateFlow<CalendarReminderSetting> = _calendarReminder.asStateFlow()
 
+    private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
     fun init(context: Context) {
         if (prefs != null) return
         val storage = context.applicationContext
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs = storage
         _pendingFirst.value = storage.getBoolean(KEY_PENDING_FIRST, true)
+        _themeMode.value = ThemeMode.fromName(storage.getString(KEY_THEME_MODE, null))
         _calendarReminder.value = CalendarReminderSetting(
             hour = storage.getInt(KEY_CAL_HOUR, 20),
             minute = storage.getInt(KEY_CAL_MINUTE, 0),
             created = storage.getBoolean(KEY_CAL_CREATED, false)
         )
+    }
+
+    fun updateThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        prefs?.edit()?.putString(KEY_THEME_MODE, mode.name)?.apply()
     }
 
     fun updatePendingFirst(enabled: Boolean) {

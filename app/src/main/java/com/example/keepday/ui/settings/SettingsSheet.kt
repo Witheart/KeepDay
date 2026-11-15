@@ -37,7 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.keepday.data.CalendarReminderSetting
+import com.example.keepday.data.ThemeMode
 
 private val timePresets = listOf(7 to 0, 8 to 0, 12 to 0, 20 to 0, 21 to 0, 22 to 0)
 
@@ -46,6 +48,8 @@ private val timePresets = listOf(7 to 0, 8 to 0, 12 to 0, 20 to 0, 21 to 0, 22 t
 fun SettingsSheet(
     pendingFirst: Boolean,
     habitsCount: Int,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
     calendarReminder: CalendarReminderSetting,
     calendarPermissionGranted: Boolean,
     onSetCalendarReminder: (hour: Int, minute: Int) -> Unit,
@@ -80,6 +84,36 @@ fun SettingsSheet(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.height(20.dp))
+
+            // ---------------- 外观 ----------------
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "外观",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ThemeMode.entries.forEach { mode ->
+                            ThemeOption(
+                                mode = mode,
+                                selected = mode == themeMode,
+                                modifier = Modifier.weight(1f),
+                                onClick = { onThemeModeChange(mode) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
 
             // ---------------- 打卡提醒（系统日历） ----------------
             Surface(
@@ -345,6 +379,49 @@ private fun TimePickerDialog(
 
 private fun formatTime(hour: Int, minute: Int): String =
     "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+
+@Composable
+private fun ThemeOption(
+    mode: ThemeMode,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(14.dp)
+    val contentColor = if (selected) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                else MaterialTheme.colorScheme.surface
+            )
+            .then(
+                if (selected) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, shape)
+                else Modifier
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = when (mode) {
+                ThemeMode.SYSTEM -> "◐"
+                ThemeMode.LIGHT -> "☀"
+                ThemeMode.DARK -> "☾"
+            },
+            fontSize = 16.sp,
+            color = contentColor
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = mode.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor
+        )
+    }
+}
 
 @Composable
 private fun ActionRow(
