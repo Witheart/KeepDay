@@ -1,0 +1,211 @@
+# KeepDay · 打卡
+
+一个纯本地的习惯打卡 App，用 Kotlin + Jetpack Compose 写成。没有账号、没有服务端、不联网，
+所有数据只保存在自己手机上，适合长期坚持记录、也方便每年做回顾。
+
+- 包名：`com.example.keepday`
+- 版本：**1.2**（versionCode 3）
+- 系统要求：**Android 11（API 30）及以上**
+
+---
+
+## 功能
+
+### 今日打卡
+
+- 每个习惯一张卡片：图标、连续天数、本周进度、最近 7 天打卡条、一键打卡按钮
+- **未完成优先排序**：打过的自动下沉，可在设置里关闭
+- **置顶**：常用习惯固定在列表最前（卡片名称旁显示 📌）
+- **一键完成**：标题右侧按钮，一键标记当天所有未打卡的习惯
+- **全部完成**时播放全屏纸屑动画（只在本次会话中由"未完成 → 全部完成"触发）
+
+### 习惯设置
+
+| 能力 | 说明 |
+|---|---|
+| 每周目标 | 1~7 天，卡片显示「本周 x/y」 |
+| 严格模式 | 漏打一天**连续天数清零**，历史记录与其他统计保留（累计天数、月历、完成率都不受影响） |
+| 补卡开关 | 仅**新建时**可设置；关闭后只能打当天的卡，单向不可逆 |
+| 图标 / 配色 | 12 个 emoji + 6 套渐变配色 |
+
+### 详情与补卡
+
+- 连续天数、最长连续、累计打卡、最近 30 天完成率
+- 月历热力图，可翻月点按补卡
+  - **实心渐变** = 当天打卡
+  - **描边 + 浅填充** = 补卡（由打卡时刻反推，连续天数照常计算）
+- 给过去的日期补卡时，会弹一句打趣提示
+- 显示当天打卡时刻与"其中补卡 N 次"
+
+### 统计
+
+- 今日完成率总览
+- **年度概览**：打卡次数、活跃天数、最活跃月份
+- **年度热力图**：12 个月 × 31 天，颜色深浅 = 当天完成的习惯数
+- 最近 7 天完成率柱状图
+- **打卡时间分布**：凌晨 / 早晨 / 上午 / 下午 / 傍晚 / 夜间
+- 各习惯最近 30 天完成率排行
+
+### 桌面小组件（两种尺寸）
+
+| 组件 | 内容 |
+|---|---|
+| 今日打卡（4×3，可拖矮） | 进度条 + 习惯清单，**点某一行直接打卡**；高度拖矮时自动从 4 行收敛到 1 行 |
+| 今日打卡（2×2） | 环形进度 + 今日完成数 |
+
+### 提醒
+
+提醒**不在 App 内做本地闹钟**，而是往**系统日历**写一条「每天重复 + 0 分钟提醒」的事件：
+
+- 由系统日历应用负责通知，**划掉 KeepDay、清理后台甚至卸载都不影响**
+- 原因：Android 上应用被 force-stop 后所有闹钟会被系统取消，纯本地方案无法保证送达
+- 设置里可创建 / 更新 / 删除，首次使用需授予日历权限
+
+### 其他
+
+- **备份**：导出 JSON 到任意位置，支持从文件恢复（带文件来源校验，非法文件不会清空数据）
+- **主题**：跟随系统 / 浅色 / 深色，状态栏图标同步反转
+- 删除习惯支持 Snackbar 撤销
+
+---
+
+## 技术栈
+
+| 项目 | 版本 |
+|---|---|
+| Gradle | 9.3.1（wrapper） |
+| Android Gradle Plugin | 9.1.1 |
+| Kotlin | 2.2.10 |
+| Compose BOM | 2026.02.01 |
+| compileSdk / targetSdk | 36.1 / 36 |
+| minSdk | 30 |
+
+- 界面：Jetpack Compose + Material 3，自定义品牌配色与排版
+- 持久化：SharedPreferences + `org.json`（数据量小，无需数据库）
+- 小组件：经典 `RemoteViews`（未引入 Glance），圆环进度用 Canvas 画成 Bitmap
+- 日历：`CalendarContract` 直接写入 / 删除事件
+
+---
+
+## 构建
+
+### 调试包
+
+```bash
+./gradlew :app:assembleDebug
+# 产物：app/build/outputs/apk/debug/app-debug.apk
+```
+
+### 发布包
+
+```bash
+./gradlew :app:assembleRelease
+# 产物：app/build/outputs/apk/release/app-release.apk
+```
+
+发布签名从仓库根目录的 `keystore.properties` 读取（**该文件与 `*.jks` 已加入 .gitignore，不会进版本库**）：
+
+```properties
+storeFile=keepday-release.jks
+storePassword=你的密码
+keyAlias=keepday
+keyPassword=你的密码
+```
+
+文件不存在时，`assembleRelease` 会退化为产出未签名包，不会报错。
+
+> ⚠️ 请务必备份 `keepday-release.jks`。密钥丢失后无法给已安装旧版的用户做覆盖升级。
+
+### 安装到设备
+
+```bash
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+> debug 包与 release 包签名不同，不能互相覆盖安装；切换需要卸载（会清数据），
+> 建议先「导出备份」再切换，装好后「从备份恢复」。
+
+---
+
+## 数据与隐私
+
+- 不联网、无账号、无第三方统计 SDK
+- 打卡数据存在应用私有的 SharedPreferences（`keepday_store.xml`）中
+- 提醒事件写入系统日历，App 只读写自己创建的那条事件
+- 卸载应用即删除全部数据，建议定期「导出备份」
+
+---
+
+## 项目结构
+
+```
+app/src/main/java/com/example/keepday/
+├── MainActivity.kt              入口：初始化数据、主题与状态栏
+├── data/
+│   ├── Habit.kt                 习惯模型：连续天数、周目标、严格模式、补卡判定
+│   ├── HabitStore.kt            数据仓库：StateFlow + SharedPreferences
+│   ├── SettingsStore.kt         偏好设置：排序、主题、日历提醒
+│   ├── ThemeMode.kt             主题模式枚举
+│   └── BackupManager.kt         备份导出 / 恢复
+├── calendar/
+│   └── CalendarReminder.kt      系统日历每日提醒的写入与删除
+├── widget/
+│   ├── TodayWidgetProvider.kt   4×3 组件（按高度自适应行数）
+│   ├── CompactWidgetProvider.kt 2×2 组件（环形进度）
+│   ├── WidgetCheckInReceiver.kt 组件内点行打卡
+│   └── WidgetUpdater.kt         统一刷新入口
+└── ui/
+    ├── KeepDayApp.kt            应用外壳：导航、弹窗、Snackbar、庆祝动画
+    ├── today/                   今日打卡页
+    ├── detail/                  习惯详情（月历补卡、统计）
+    ├── stats/                   统计页
+    ├── settings/                设置面板
+    ├── editor/                  新建 / 编辑习惯
+    ├── components/              公共组件与纸屑动画
+    └── theme/                   配色、排版、主题
+```
+
+---
+
+## 测试
+
+```bash
+./gradlew :app:testDebugUnitTest
+```
+
+共 19 个 JVM 单元测试，覆盖核心规则（不依赖 Android 运行时）：
+
+| 测试类 | 覆盖内容 |
+|---|---|
+| `StrictModeRuleTest` | 严格模式断签判定、连续天数从清零点重新计算、补卡不复活连续 |
+| `BackfillRuleTest` | 补卡开关：关闭后历史日期不可打卡、当天仍可打卡、未来一律拒绝 |
+| `BackupRoundTripTest` | 备份往返一致性、拒绝他人备份、非法 JSON 不清空数据 |
+
+> `org.json` 在 Android 单元测试里是空实现，因此测试依赖中额外引入了 `org.json:json`。
+
+---
+
+## 设计上的几个取舍
+
+1. **提醒为什么用系统日历**：本地 `AlarmManager` 在应用被 force-stop 后会被系统全部取消，
+   实测在国产 ROM（vivo）上很常见；交给系统日历才能保证"杀掉应用也能响"。
+   代价是通知署名是"日历"，且日历里会多一条事件。
+2. **补卡如何区分**：不额外存字段，直接用"打卡时刻所在日期 vs 记录日期"反推，历史数据无需迁移。
+3. **严格模式只清连续天数**：累计天数、月历、完成率都保留，避免"一次失误抹掉全部历史"。
+4. **小组件自适应**：`RemoteViews` 不支持 Canvas，2×2 的环形进度先画成 Bitmap 再塞给 `ImageView`。
+
+---
+
+## 版本记录
+
+| 版本 | 内容 |
+|---|---|
+| 1.2 | 大组件可拖矮并自适应行数；补卡与当天打卡视觉区分；一键完成；全屏庆祝动画 |
+| 1.1 | 提醒改为系统日历；补卡开关；记录打卡时刻；年度概览 / 热力图 / 时间分布；小组件多尺寸；备份导出恢复；明暗主题切换 |
+| 1.0 | 打卡、详情月历、统计、严格模式、桌面小组件、每日提醒 |
+
+---
+
+## License
+
+个人项目，未指定开源协议。如需引用请先联系作者。
