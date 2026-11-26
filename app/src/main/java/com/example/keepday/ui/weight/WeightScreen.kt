@@ -2,8 +2,8 @@ package com.example.keepday.ui.weight
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -49,10 +48,10 @@ import com.example.keepday.ui.components.EmptyState
 import com.example.keepday.ui.components.SectionHeader
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import kotlin.math.roundToInt
 
 private val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M月d日")
@@ -77,6 +76,7 @@ fun WeightScreen(
     val lastEntry = entries.maxByOrNull { it.epochDay }
     val streak = WeightMath.streakAt(entries, setting, today)
     var windowDays by remember { mutableStateOf<Int?>(30) }
+    var month by remember { mutableStateOf(YearMonth.from(today)) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -159,7 +159,23 @@ fun WeightScreen(
                     entries = entries,
                     setting = setting,
                     today = today,
-                    windowDays = windowDays,
+                    windowDays = windowDays
+                )
+            }
+            item {
+                SectionHeader(
+                    title = "月度记录",
+                    count = 0,
+                    trailing = "点日期补录或修改"
+                )
+            }
+            item {
+                WeightMonthCard(
+                    entries = entries,
+                    setting = setting,
+                    today = today,
+                    month = month,
+                    onMonthChange = { month = it },
                     onPickDate = onRecord
                 )
             }
@@ -306,8 +322,7 @@ private fun WeightChartCard(
     entries: List<WeightEntry>,
     setting: WeightSetting,
     today: LocalDate,
-    windowDays: Int?,
-    onPickDate: (LocalDate) -> Unit
+    windowDays: Int?
 ) {
     val windowStart = windowDays?.let { today.minusDays(it.toLong() - 1) }
         ?: entries.minByOrNull { it.epochDay }?.date
@@ -370,13 +385,6 @@ private fun WeightChartCard(
                     modifier = Modifier
                         .weight(1f)
                         .height(150.dp)
-                        .pointerInput(visible, span, windowStart) {
-                            detectTapGestures { offset ->
-                                val ratio = (offset.x / size.width).coerceIn(0f, 1f)
-                                val date = windowStart.plusDays((ratio * span).roundToInt().toLong())
-                                if (!date.isAfter(today)) onPickDate(date)
-                            }
-                        }
                 ) {
                     fun xOf(entry: WeightEntry): Float {
                         val offsetDays = ChronoUnit.DAYS.between(windowStart, entry.date).toFloat()
@@ -468,7 +476,7 @@ private fun WeightChartCard(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "点图表任意位置可以补录那天的体重",
+                text = "下方月历可按天补录或修改",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -586,6 +594,169 @@ private fun StatLine(label: String, value: String, highlight: Boolean = false) {
             color = if (highlight) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Start
+        )
+    }
+}
+
+private val weekdayLabels = listOf("一", "二", "三", "四", "五", "六", "日")
+private val monthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy 年 M 月")
+
+/** 月视图：看哪天记过体重，点空白日期补录、点已记录日期修改。 */
+@Composable
+private fun WeightMonthCard(
+    entries: List<WeightEntry>,
+    setting: WeightSetting,
+    today: LocalDate,
+    month: YearMonth,
+    onMonthChange: (YearMonth) -> Unit,
+    onPickDate: (LocalDate) -> Unit
+) {
+    val recordedDays = entries
+        .filter { YearMonth.from(it.date) == month }
+        .associateBy { it.date.dayOfMonth }
+    val firstOffset = month.atDay(1).dayOfWeek.value - 1
+    val daysInMonth = month.lengthOfMonth()
+    val cells: List<Int?> = List(firstOffset) { null } + (1..daysInMonth).map { it }
+
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = month.format(monthFormatter),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.weight(1f))
+                MonthNavButton(text = "‹", enabled = true) {
+                    onMonthChange(month.minusMonths(1))
+                }
+                Spacer(Modifier.width(6.dp))
+                MonthNavButton(
+                    text = "›",
+                    enabled = month.isBefore(YearMonth.from(today))
+                ) {
+                    onMonthChange(month.plusMonths(1))
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth()) {
+                weekdayLabels.forEach { label ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+            cells.chunked(7).forEach { week ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    week.forEach { day ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (day != null) {
+                                val date = month.atDay(day)
+                                WeightDayCell(
+                                    day = day,
+                                    recorded = recordedDays.containsKey(day),
+                                    isToday = date == today,
+                                    enabled = WeightMath.canRecord(date, setting, today),
+                                    onClick = { onPickDate(date) }
+                                )
+                            }
+                        }
+                    }
+                    repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = if (setting.allowBackfill) {
+                    "本月已记录 ${recordedDays.size} 天 · 实心为已记录，点空白日期可补录"
+                } else {
+                    "本月已记录 ${recordedDays.size} 天 · 已关闭补录，只能记今天"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeightDayCell(
+    day: Int,
+    recorded: Boolean,
+    isToday: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = CircleShape
+    val accent = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = Modifier
+            .padding(3.dp)
+            .size(36.dp)
+            .clip(shape)
+            .then(
+                when {
+                    recorded -> Modifier.background(
+                        Brush.linearGradient(
+                            listOf(accent, MaterialTheme.colorScheme.secondary)
+                        )
+                    )
+
+                    isToday -> Modifier.border(1.5.dp, accent, shape)
+                    else -> Modifier
+                }
+            )
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "$day",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (recorded || isToday) FontWeight.SemiBold else FontWeight.Normal,
+            color = when {
+                recorded -> Color.White
+                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                isToday -> accent
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
+private fun MonthNavButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(
+                if (enabled) MaterialTheme.colorScheme.surfaceVariant
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
         )
     }
 }

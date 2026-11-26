@@ -1,8 +1,6 @@
 package com.example.keepday.ui.weight
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +10,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,16 +30,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.keepday.data.weight.WeightSetting
 import com.example.keepday.data.weight.WeightUnits
 import java.time.LocalDate
+import kotlin.math.roundToInt
 
-private const val MIN_KG = 20f
-private const val MAX_KG = 300f
+private const val MIN_KG = 20
+private const val MAX_KG = 300
+private const val DEFAULT_KG = 70f
 
-/** 记录 / 补录体重。输入单位是 kg，页面展示按斤换算。 */
+/** 记录 / 补录体重：整数与小数各一个滚轮，输入单位 kg，页面按斤展示。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeightInputSheet(
@@ -54,22 +52,14 @@ fun WeightInputSheet(
     onSave: (Float) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var text by remember {
-        mutableStateOf(
-            existingKg?.let { WeightUnits.format(it) }
-                ?: lastKg?.let { WeightUnits.format(it) }
-                ?: ""
-        )
-    }
-    val parsed = text.toFloatOrNull()
-    val valid = parsed != null && parsed in MIN_KG..MAX_KG
-    val isBackfill = date != today
+    val base = existingKg ?: lastKg ?: DEFAULT_KG
+    val baseInt = base.toInt().coerceIn(MIN_KG, MAX_KG)
+    val baseDecimal = (base * 10).roundToInt().mod(10)
 
-    fun adjust(delta: Float) {
-        val base = text.toFloatOrNull() ?: lastKg ?: 60f
-        val next = (base + delta).coerceIn(MIN_KG, MAX_KG)
-        text = WeightUnits.format(next)
-    }
+    var intPart by remember { mutableStateOf(baseInt) }
+    var decimalPart by remember { mutableStateOf(baseDecimal) }
+    val isBackfill = date != today
+    val value = intPart + decimalPart / 10f
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -94,46 +84,61 @@ fun WeightInputSheet(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "输入单位 kg，页面按斤展示（1 kg = 2 斤）",
+                text = if (existingKg != null) {
+                    "输入单位 kg，保存会覆盖原数值"
+                } else {
+                    "输入单位 kg，页面按斤展示（1 kg = 2 斤）"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { input ->
-                        text = input.filter { it.isDigit() || it == '.' }.take(5)
-                    },
-                    singleLine = true,
-                    isError = text.isNotEmpty() && !valid,
-                    placeholder = { Text("例如 63.4") },
-                    suffix = { Text("kg", style = MaterialTheme.typography.labelMedium) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    textStyle = MaterialTheme.typography.headlineSmall,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.weight(1f)
+            Spacer(Modifier.height(18.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                WheelPicker(
+                    count = MAX_KG - MIN_KG + 1,
+                    initialIndex = baseInt - MIN_KG,
+                    onSelected = { intPart = it + MIN_KG },
+                    modifier = Modifier.width(120.dp),
+                    label = { (it + MIN_KG).toString() }
                 )
-                Spacer(Modifier.width(10.dp))
-                StepButton(text = "−0.1") { adjust(-0.1f) }
-                Spacer(Modifier.width(6.dp))
-                StepButton(text = "+0.1") { adjust(0.1f) }
+                Text(
+                    text = ".",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+                WheelPicker(
+                    count = 10,
+                    initialIndex = baseDecimal,
+                    onSelected = { decimalPart = it },
+                    modifier = Modifier.width(64.dp),
+                    label = { it.toString() }
+                )
+                Text(
+                    text = "kg",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 12.dp)
+                )
             }
 
-            if (existingKg != null) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "该日期已有记录，保存会覆盖原数值",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "当前选择：${WeightUnits.format(value)} kg ≈ ${WeightUnits.format(WeightUnits.kgToJin(value))} 斤",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(Modifier.height(18.dp))
             Button(
-                onClick = { parsed?.let(onSave) },
-                enabled = valid,
+                onClick = { onSave(value) },
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -148,23 +153,6 @@ fun WeightInputSheet(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun StepButton(text: String, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp)) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -249,7 +237,6 @@ fun WeightSettingsSheet(
                     singleLine = true,
                     placeholder = { Text("例如 60") },
                     suffix = { Text("kg", style = MaterialTheme.typography.labelMedium) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.weight(1f)
                 )
@@ -257,7 +244,9 @@ fun WeightSettingsSheet(
                 TextButton(
                     onClick = {
                         val kg = goalText.toFloatOrNull()
-                        onUpdateGoal(if (kg != null && kg in MIN_KG..MAX_KG) kg else null)
+                        onUpdateGoal(
+                            if (kg != null && kg >= MIN_KG && kg <= MAX_KG) kg else null
+                        )
                     }
                 ) {
                     Text(
@@ -270,7 +259,7 @@ fun WeightSettingsSheet(
             if (setting.goalKg != null) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "当前目标：${WeightUnits.format(setting.goalKg * 2)} 斤，清空输入框可取消目标",
+                    text = "当前目标：${WeightUnits.format(WeightUnits.kgToJin(setting.goalKg))} 斤，清空输入框可取消目标",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
