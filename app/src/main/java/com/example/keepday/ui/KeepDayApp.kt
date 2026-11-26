@@ -1,5 +1,6 @@
 package com.example.keepday.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
@@ -230,6 +231,14 @@ fun KeepDayApp() {
     }
 
     val detailHabit = habits.firstOrNull { it.id == detailId }
+
+    // 返回键逐级回退：详情页 → 列表，其它 Tab → 今日，最后才退出应用
+    BackHandler(enabled = detailHabit != null) {
+        detailId = null
+    }
+    BackHandler(enabled = detailHabit == null && tab != AppTab.Today) {
+        tab = AppTab.Today
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),

@@ -275,7 +275,7 @@ fun SettingsSheet(
 
             Spacer(Modifier.height(20.dp))
             Text(
-                text = "KeepDay 1.3 · 所有数据仅保存在本机",
+                text = "KeepDay 1.3.1 · 所有数据仅保存在本机",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
