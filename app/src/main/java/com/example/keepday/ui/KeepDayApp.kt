@@ -50,24 +50,32 @@ import com.example.keepday.data.BackupManager
 import com.example.keepday.data.Habit
 import com.example.keepday.data.HabitStore
 import com.example.keepday.data.SettingsStore
+import com.example.keepday.data.weight.WeightMath
+import com.example.keepday.data.weight.WeightStore
 import com.example.keepday.ui.components.CelebrationOverlay
 import com.example.keepday.ui.detail.HabitDetailScreen
 import com.example.keepday.ui.editor.HabitEditorDialog
 import com.example.keepday.ui.settings.SettingsSheet
 import com.example.keepday.ui.stats.StatsScreen
 import com.example.keepday.ui.today.TodayScreen
+import com.example.keepday.ui.weight.WeightInputSheet
+import com.example.keepday.ui.weight.WeightScreen
+import com.example.keepday.ui.weight.WeightSettingsSheet
 import com.example.keepday.widget.WidgetUpdater
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 private enum class AppTab(val label: String, val glyph: String) {
     Today(label = "今日", glyph = "☀"),
+    Weight(label = "体重", glyph = "⚖"),
     Stats(label = "统计", glyph = "◎")
 }
 
 @Composable
 fun KeepDayApp() {
     val habits by HabitStore.habits.collectAsState()
+    val weightEntries by WeightStore.entries.collectAsState()
+    val weightSetting by WeightStore.setting.collectAsState()
     val pendingFirst by SettingsStore.pendingFirst.collectAsState()
     val themeMode by SettingsStore.themeMode.collectAsState()
     val calendarReminder by SettingsStore.calendarReminder.collectAsState()
@@ -82,6 +90,8 @@ fun KeepDayApp() {
     var showEditor by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var backfillTarget by remember { mutableStateOf<Habit?>(null) }
+    var weightInputDate by remember { mutableStateOf<LocalDate?>(null) }
+    var showWeightSettings by remember { mutableStateOf(false) }
 
     fun applyCalendarReminder(hour: Int, minute: Int) {
         if (CalendarReminder.createOrUpdate(context, hour, minute)) {
@@ -277,6 +287,14 @@ fun KeepDayApp() {
                         onDelete = { deleteHabit(currentDetail) }
                     )
 
+                    state.second == AppTab.Weight -> WeightScreen(
+                        entries = weightEntries,
+                        setting = weightSetting,
+                        today = today,
+                        onRecord = { date -> weightInputDate = date },
+                        onOpenSettings = { showWeightSettings = true }
+                    )
+
                     state.second == AppTab.Stats -> StatsScreen(
                         habits = habits,
                         today = today,
@@ -432,6 +450,39 @@ fun KeepDayApp() {
         )
     }
 
+    weightInputDate?.let { date ->
+        WeightInputSheet(
+            date = date,
+            today = today,
+            existingKg = WeightMath.entryAt(weightEntries, date)?.kg,
+            lastKg = weightEntries.maxByOrNull { it.epochDay }?.kg,
+            onDismiss = { weightInputDate = null },
+            onSave = { kg ->
+                val saved = WeightStore.record(date, kg)
+                weightInputDate = null
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        if (saved) {
+                            "已记录 ${date.monthValue} 月 ${date.dayOfMonth} 日的体重"
+                        } else {
+                            "该日期不允许补录"
+                        }
+                    )
+                }
+            }
+        )
+    }
+
+    if (showWeightSettings) {
+        WeightSettingsSheet(
+            setting = weightSetting,
+            onToggleStrict = { WeightStore.updateStrict(it) },
+            onDisableBackfill = { WeightStore.disableBackfill() },
+            onUpdateGoal = { kg -> WeightStore.updateGoal(kg) },
+            onDismiss = { showWeightSettings = false }
+        )
+    }
+
     if (showSettings) {
         SettingsSheet(
             pendingFirst = pendingFirst,
@@ -495,7 +546,7 @@ private fun BottomBarItem(item: AppTab, selected: Boolean, onClick: () -> Unit) 
         modifier = Modifier
             .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 26.dp, vertical = 6.dp),
+            .padding(horizontal = 18.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(

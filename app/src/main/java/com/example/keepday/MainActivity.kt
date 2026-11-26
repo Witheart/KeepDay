@@ -12,6 +12,7 @@ import androidx.core.view.WindowCompat
 import com.example.keepday.data.HabitStore
 import com.example.keepday.data.SettingsStore
 import com.example.keepday.data.ThemeMode
+import com.example.keepday.data.weight.WeightStore
 import com.example.keepday.ui.KeepDayApp
 import com.example.keepday.ui.theme.KeepDayTheme
 
@@ -21,6 +22,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         HabitStore.init(this)
         SettingsStore.init(this)
+        WeightStore.init(this)
         setContent {
             val mode by SettingsStore.themeMode.collectAsState()
             val darkTheme = when (mode) {
@@ -47,5 +49,6 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // 长时间挂在后台再回来时，跨天漏打需要立刻清算
         HabitStore.refreshStrict()
+        WeightStore.refreshStrict()
     }
 }

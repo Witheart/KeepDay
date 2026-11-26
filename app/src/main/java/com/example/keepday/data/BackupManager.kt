@@ -1,5 +1,6 @@
 package com.example.keepday.data
 
+import com.example.keepday.data.weight.WeightStore
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -40,6 +41,7 @@ object BackupManager {
             }
         )
         root.put("habits", JSONArray(HabitStore.exportHabitsJson()))
+        root.put("weight", JSONObject(WeightStore.exportJson()))
         return root.toString(2)
     }
 
@@ -53,6 +55,9 @@ object BackupManager {
             ?: return ImportResult(false, message = "备份里没有习惯数据")
         if (!HabitStore.importHabitsJson(habits.toString())) {
             return ImportResult(false, message = "习惯数据解析失败")
+        }
+        root.optJSONObject("weight")?.let { weight ->
+            WeightStore.importJson(weight.toString())
         }
         if (root.has("pendingFirst")) {
             SettingsStore.updatePendingFirst(root.optBoolean("pendingFirst", true))
