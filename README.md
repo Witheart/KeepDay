@@ -4,7 +4,7 @@
 所有数据只保存在自己手机上，适合长期坚持记录、也方便每年做回顾。
 
 - 包名：`com.example.keepday`
-- 版本：**1.2**（versionCode 3）
+- 版本：**1.3**（versionCode 4）
 - 系统要求：**Android 11（API 30）及以上**
 
 ---
@@ -36,6 +36,17 @@
   - **描边 + 浅填充** = 补卡（由打卡时刻反推，连续天数照常计算）
 - 给过去的日期补卡时，会弹一句打趣提示
 - 显示当天打卡时刻与"其中补卡 N 次"
+
+### 体重记录
+
+底部导航第二个 Tab，记录规则与习惯打卡一致（每天一条、可设严格模式与补录开关）：
+
+- 今日体重按**斤**大字展示（输入用 kg，1 kg = 2 斤），带记录时刻与"比昨天 ↓0.4 斤"
+- 趋势折线图支持 **近 7 / 30 / 90 天 / 全部** 四个维度，含目标体重虚线
+- **点图表任意位置即可补录那天的体重**（补录受开关限制）
+- 文字统计：窗口内增减、较昨天、较 7 天前、最高/最低（含日期）、记录天数、
+  连续与最长连续、距目标还差多少斤
+- 设置里可配置严格模式、补录开关（单向关闭）与目标体重
 
 ### 统计
 
@@ -146,7 +157,8 @@ app/src/main/java/com/example/keepday/
 │   ├── HabitStore.kt            数据仓库：StateFlow + SharedPreferences
 │   ├── SettingsStore.kt         偏好设置：排序、主题、日历提醒
 │   ├── ThemeMode.kt             主题模式枚举
-│   └── BackupManager.kt         备份导出 / 恢复
+│   ├── BackupManager.kt         备份导出 / 恢复
+│   └── weight/                  体重模型、纯计算（WeightMath）与仓库（WeightStore）
 ├── calendar/
 │   └── CalendarReminder.kt      系统日历每日提醒的写入与删除
 ├── widget/
@@ -157,6 +169,7 @@ app/src/main/java/com/example/keepday/
 └── ui/
     ├── KeepDayApp.kt            应用外壳：导航、弹窗、Snackbar、庆祝动画
     ├── today/                   今日打卡页
+    ├── weight/                  体重页（大字、折线图、录入/设置弹层）
     ├── detail/                  习惯详情（月历补卡、统计）
     ├── stats/                   统计页
     ├── settings/                设置面板
@@ -173,13 +186,14 @@ app/src/main/java/com/example/keepday/
 ./gradlew :app:testDebugUnitTest
 ```
 
-共 19 个 JVM 单元测试，覆盖核心规则（不依赖 Android 运行时）：
+共 33 个 JVM 单元测试，覆盖核心规则（不依赖 Android 运行时）：
 
 | 测试类 | 覆盖内容 |
 |---|---|
 | `StrictModeRuleTest` | 严格模式断签判定、连续天数从清零点重新计算、补卡不复活连续 |
 | `BackfillRuleTest` | 补卡开关：关闭后历史日期不可打卡、当天仍可打卡、未来一律拒绝 |
 | `BackupRoundTripTest` | 备份往返一致性、拒绝他人备份、非法 JSON 不清空数据 |
+| `WeightRuleTest` | 体重连续记录、补录限制、严格模式、窗口统计与斤/公斤换算 |
 
 > `org.json` 在 Android 单元测试里是空实现，因此测试依赖中额外引入了 `org.json:json`。
 
@@ -200,6 +214,7 @@ app/src/main/java/com/example/keepday/
 
 | 版本 | 内容 |
 |---|---|
+| 1.3 | 新增体重记录页：大字今日体重、多时间维度折线图、点图补录、目标体重与文字统计；体重数据纳入备份 |
 | 1.2 | 大组件可拖矮并自适应行数；补卡与当天打卡视觉区分；一键完成；全屏庆祝动画 |
 | 1.1 | 提醒改为系统日历；补卡开关；记录打卡时刻；年度概览 / 热力图 / 时间分布；小组件多尺寸；备份导出恢复；明暗主题切换 |
 | 1.0 | 打卡、详情月历、统计、严格模式、桌面小组件、每日提醒 |
