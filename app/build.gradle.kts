@@ -27,8 +27,8 @@ android {
         applicationId = "com.example.keepday"
         minSdk = 30
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.3.2"
+        versionCode = 8
+        versionName = "1.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

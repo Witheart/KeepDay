@@ -55,6 +55,8 @@ import com.example.keepday.data.weight.WeightMath
 import com.example.keepday.data.weight.WeightStore
 import com.example.keepday.ui.components.CelebrationOverlay
 import com.example.keepday.ui.detail.HabitDetailScreen
+import com.example.keepday.ui.egg.BirthdayCelebration
+import com.example.keepday.ui.egg.BirthdayEgg
 import com.example.keepday.ui.editor.HabitEditorDialog
 import com.example.keepday.ui.settings.SettingsSheet
 import com.example.keepday.ui.stats.StatsScreen
@@ -93,6 +95,14 @@ fun KeepDayApp() {
     var backfillTarget by remember { mutableStateOf<Habit?>(null) }
     var weightInputDate by remember { mutableStateOf<LocalDate?>(null) }
     var showWeightSettings by remember { mutableStateOf(false) }
+    var showBirthdayEgg by remember { mutableStateOf(false) }
+
+    // 生日彩蛋：国历 11-27 / 农历十月二十六，当天每次打开都播放
+    LaunchedEffect(Unit) {
+        if (BirthdayEgg.isBirthday(today)) {
+            showBirthdayEgg = true
+        }
+    }
 
     fun applyCalendarReminder(hour: Int, minute: Int) {
         if (CalendarReminder.createOrUpdate(context, hour, minute)) {
@@ -457,6 +467,10 @@ fun KeepDayApp() {
                 }
             }
         )
+    }
+
+    if (showBirthdayEgg) {
+        BirthdayCelebration(onFinished = { showBirthdayEgg = false })
     }
 
     weightInputDate?.let { date ->
